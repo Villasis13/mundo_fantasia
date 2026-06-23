@@ -1,0 +1,1 @@
+@extends('layouts.plantilla')@section('content')    <div class="row">        <div class="col-lg-12 col-md-12 col-sm-12 mb-2">            @livewire('inicio.dashboard-admin')        </div>    </div>@endsection
