@@ -51,7 +51,7 @@
                                 <div class="alert alert-info py-2 mb-0 small">
                                     <i class="fa-solid fa-circle-info me-2"></i>
                                     Al crear la caja se generarán automáticamente las series para
-                                    <strong>Factura</strong>, <strong>Boleta</strong> y <strong>Nota de Venta</strong>.
+                                    <strong>Factura</strong>, <strong>Boleta</strong>, <strong>Nota de Crédito</strong> y <strong>Nota de Débito</strong>.
                                 </div>
                             </div>
                         @endif
@@ -373,7 +373,7 @@
                             @php
                                 $seriesCaja = DB::table('serie')
                                     ->where('id_caja_numero', $caja->id_caja_numero)
-                                    ->whereIn('tipocomp', ['01', '03', '20'])
+                                    ->whereIn('tipocomp', ['01', '03', '07', '08'])
                                     ->orderBy('tipocomp')
                                     ->get();
                             @endphp

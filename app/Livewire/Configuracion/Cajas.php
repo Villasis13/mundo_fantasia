@@ -33,7 +33,7 @@ class Cajas extends Component
     public $buscar         = '';
     public $porPagina      = 10;
     public $ordenColumna   = 'id_caja_numero';
-    public $ordenDireccion = 'desc';
+    public $ordenDireccion = 'asc';
 
     // ── Modal eliminar caja ───────────────────────────────────
     public $idCajaEliminar = null;
@@ -284,7 +284,8 @@ class Cajas extends Component
         $tiposComprobante = [
             '01' => 'F',  // Factura
             '03' => 'B',  // Boleta
-            '20' => 'NV', // Nota de venta
+            '07' => 'FC', // Nota de Crédito
+            '08' => 'FD', // Nota de Débito
         ];
 
         $idEmpresa = $this->idTienda > 0
@@ -361,7 +362,7 @@ class Cajas extends Component
         // Cargar las 3 series de la caja como array editable
         $seriesDb = DB::table('serie')
             ->where('id_caja_numero', $idCaja)
-            ->whereIn('tipocomp', ['01', '03', '20'])
+            ->whereIn('tipocomp', ['01', '03', '07', '08'])
             ->orderBy('tipocomp')
             ->get();
 
@@ -431,7 +432,8 @@ class Cajas extends Component
         return match($tipocomp) {
             '01' => 'Factura',
             '03' => 'Boleta',
-            '20' => 'Nota de Venta',
+            '07' => 'Nota de Crédito',
+            '08' => 'Nota de Débito',
             default => $tipocomp,
         };
     }
