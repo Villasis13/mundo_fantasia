@@ -82,6 +82,146 @@ class LogisticaController extends Controller
             </script>";
         }
     }
+    public function ingreso_compra_pdf()
+    {
+        $id = (int) ($_GET['ordenCompra'] ?? 0);
+        if (!$id) {
+            return redirect()->route('logistica.compras');
+        }
+
+        $orden = DB::table('orden_compra')->where('id_orden_compra', $id)->first();
+        if (!$orden) {
+            echo "<script>alert('Compra no encontrada.');window.history.back();</script>";
+            return;
+        }
+
+        $empresa   = $orden->id_empresa ? DB::table('empresa')->where('id_empresa', $orden->id_empresa)->first() : null;
+        $proveedor = DB::table('proveedores')->where('id_proveedores', $orden->id_proveedores)->first();
+
+        $detalle = DB::table('orden_compra_detalle as d')
+            ->leftJoin('productos as p', 'p.id_pro', '=', 'd.id_pro')
+            ->where('d.id_orden_compra', $id)
+            ->where('d.detalle_compra_estado', 1)
+            ->select('d.*', 'p.pro_codigo')
+            ->get();
+
+        $transportistas = [];
+        if (!empty($orden->orden_compra_transportistas)) {
+            $dec = json_decode($orden->orden_compra_transportistas, true);
+            if (is_array($dec)) {
+                $transportistas = array_values(array_filter(array_map(fn($t) => trim($t['nombre'] ?? ''), $dec)));
+            }
+        }
+
+        $estadoMap = ['pendiente' => 'Pendiente', 'en_transito' => 'En Tránsito', 'recibido' => 'Recibido', 'anulado' => 'Anulado'];
+        $simbolo   = ($orden->moneda ?? 'PEN') === 'USD' ? '$' : 'S/';
+        $subtotal  = (float) $detalle->sum('detalle_compra_total_pedido');
+
+        $pdf = new PDFBufeo('P', 'mm', 'A4');
+        $pdf->SetMargins(10, 12, 10);
+        $pdf->SetAutoPageBreak(true, 15);
+        $pdf->AddPage();
+        $pdf->AliasNbPages();
+
+        if ($empresa && !empty($empresa->empresa_foto_ticket) && file_exists($empresa->empresa_foto_ticket)) {
+            $pdf->Image($empresa->empresa_foto_ticket, 10, 10, 28, 0);
+        }
+        $pdf->SetFont('Helvetica', 'B', 13);
+        $pdf->SetXY(40, 11);
+        $pdf->Cell(110, 6, utf8_decode($empresa->empresa_razon_social ?? 'EMPRESA'), 0, 1, 'L');
+        $pdf->SetFont('Helvetica', '', 8);
+        if ($empresa) {
+            $pdf->SetX(40);
+            $pdf->Cell(110, 4, 'RUC: ' . ($empresa->empresa_ruc ?? '-'), 0, 1, 'L');
+            $pdf->SetX(40);
+            $pdf->MultiCell(110, 4, utf8_decode($empresa->empresa_domiciliofiscal ?? ''), 0, 'L');
+        }
+        $pdf->SetXY(150, 10);
+        $pdf->SetFont('Helvetica', 'B', 10);
+        $pdf->Cell(50, 7, utf8_decode('REGISTRO DE INGRESO'), 1, 2, 'C');
+        $pdf->SetFont('Helvetica', '', 9);
+        $pdf->Cell(50, 6, utf8_decode($orden->orden_compra_numero), 1, 2, 'C');
+        $pdf->SetFont('Helvetica', '', 7);
+        $pdf->Cell(50, 5, utf8_decode('Estado: ' . ($estadoMap[$orden->orden_compra_estado] ?? $orden->orden_compra_estado)), 1, 2, 'C');
+
+        $pdf->SetY(max($pdf->GetY(), 40));
+        $pdf->Ln(2);
+
+        $lblW = 32; $valW = 62;
+        $fila = function ($l1, $v1, $l2 = null, $v2 = null) use ($pdf, $lblW, $valW) {
+            $pdf->SetFont('Helvetica', 'B', 8); $pdf->Cell($lblW, 5, utf8_decode($l1), 0, 0, 'L');
+            $pdf->SetFont('Helvetica', '', 8);  $pdf->Cell($valW, 5, utf8_decode($v1), 0, 0, 'L');
+            if ($l2 !== null) {
+                $pdf->SetFont('Helvetica', 'B', 8); $pdf->Cell($lblW, 5, utf8_decode($l2), 0, 0, 'L');
+                $pdf->SetFont('Helvetica', '', 8);  $pdf->Cell($valW, 5, utf8_decode($v2), 0, 1, 'L');
+            } else {
+                $pdf->Ln();
+            }
+        };
+        $fila('Proveedor:', $proveedor->proveedores_nombre ?? ($orden->orden_compra_nom_prove ?? '-'),
+              'RUC/Doc:',  $proveedor->proveedores_numero_documento ?? ($orden->orden_compra_num_document ?? '-'));
+        $fila('Comprobante:', trim(($orden->orden_compra_tipo_doc ?? '') . ' ' . ($orden->orden_compra_numero_doc ?? '-')),
+              'Condición:', ucfirst($orden->condicion_pago ?? '-'));
+        $fila('F. Emisión:', $orden->orden_compra_fecha_emision_doc ? date('d/m/Y', strtotime($orden->orden_compra_fecha_emision_doc)) : '-',
+              'F. Almacen.:', $orden->fecha_almacenamiento ? date('d/m/Y', strtotime($orden->fecha_almacenamiento)) : '-');
+        $fila('G. Remitente:', $orden->orden_compra_guia_remitente ?? '-',
+              'G. Transport.:', $orden->orden_compra_guia_transportista ?? '-');
+        $fila('Transportistas:', !empty($transportistas) ? implode(' | ', $transportistas) : '-');
+        if (!empty($orden->orden_compra_observacion)) {
+            $fila('Observación:', $orden->orden_compra_observacion);
+        }
+        $pdf->Ln(2);
+
+        $cols  = [10, 26, 70, 22, 18, 22, 22];
+        $heads = ['#', utf8_decode('Código'), utf8_decode('Descripción'), 'Present.', 'Cant.', 'P. Compra', 'Total'];
+        $pdf->SetFillColor(30, 58, 95);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->SetFont('Helvetica', 'B', 7);
+        foreach ($heads as $i => $h) {
+            $pdf->Cell($cols[$i], 7, $h, 1, 0, 'C', true);
+        }
+        $pdf->Ln();
+
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetFont('Helvetica', '', 7);
+        $fill = false;
+        foreach ($detalle as $i => $d) {
+            $pdf->SetFillColor($fill ? 245 : 255, $fill ? 245 : 255, $fill ? 245 : 255);
+            $pdf->Cell($cols[0], 6, $i + 1, 'B', 0, 'C', true);
+            $pdf->Cell($cols[1], 6, utf8_decode(mb_substr($d->pro_codigo ?? '-', 0, 13)), 'B', 0, 'L', true);
+            $pdf->Cell($cols[2], 6, utf8_decode(mb_substr($d->detalle_orden_nombre_producto ?? '-', 0, 42)), 'B', 0, 'L', true);
+            $pdf->Cell($cols[3], 6, utf8_decode(mb_substr($d->presentacion ?? '-', 0, 12)), 'B', 0, 'C', true);
+            $pdf->Cell($cols[4], 6, number_format((float) $d->detalle_compra_cantidad, 2), 'B', 0, 'C', true);
+            $pdf->Cell($cols[5], 6, number_format((float) $d->detalle_compra_precio_compra, 2), 'B', 0, 'R', true);
+            $pdf->Cell($cols[6], 6, number_format((float) $d->detalle_compra_total_pedido, 2), 'B', 1, 'R', true);
+            $fill = !$fill;
+        }
+
+        $pdf->Ln(2);
+        $totW = array_sum(array_slice($cols, 0, 5));
+        $totales = [
+            ['Subtotal',                $subtotal],
+            ['Descuento (' . rtrim(rtrim(number_format((float)$orden->orden_compra_descuento_porcentaje, 2), '0'), '.') . '%)', -1 * (float) $orden->orden_compra_descuento_monto],
+            ['IGV (' . rtrim(rtrim(number_format((float)$orden->orden_compra_igv_porcentaje, 2), '0'), '.') . '%)', (float) $orden->orden_compra_igv_monto],
+            ['Percepción (' . rtrim(rtrim(number_format((float)$orden->orden_compra_percepcion_porcentaje, 2), '0'), '.') . '%)', (float) $orden->orden_compra_percepcion_monto],
+            ['Flete',                   (float) $orden->orden_compra_flete],
+            ['Gastos operativos',       (float) $orden->orden_compra_gastos_operativos],
+        ];
+        $pdf->SetFont('Helvetica', '', 8);
+        foreach ($totales as $t) {
+            $pdf->Cell($totW, 5, '', 0, 0);
+            $pdf->Cell($cols[5], 5, utf8_decode($t[0]), 0, 0, 'R');
+            $pdf->Cell($cols[6], 5, $simbolo . ' ' . number_format($t[1], 2), 0, 1, 'R');
+        }
+        $pdf->SetFont('Helvetica', 'B', 9);
+        $pdf->Cell($totW, 7, '', 0, 0);
+        $pdf->Cell($cols[5], 7, 'TOTAL', 1, 0, 'R');
+        $pdf->Cell($cols[6], 7, $simbolo . ' ' . number_format((float) $orden->orden_compra_total, 2), 1, 1, 'R');
+
+        $pdf->Output('I', 'ingreso_' . $orden->orden_compra_numero . '.pdf');
+        exit;
+    }
+
     public function ordenCompraDetalle()
     {
         try {

@@ -162,6 +162,8 @@
                                class="form-control form-control-sm"
                                placeholder="Buscar por N°, cliente, doc..."
                                style="max-width:230px;">
+                        <button type="button" class="btn-close flex-shrink-0"
+                                data-bs-dismiss="modal" aria-label="Cerrar" title="Cerrar"></button>
                     </div>
                 </div>
 
@@ -1301,12 +1303,27 @@
 
     @endif {{-- /despachar --}}
 
+    {{-- ══════════════════════════════════════════════════════
+         BOTÓN FLOTANTE — Reabrir modal de selección (visible al cerrar)
+    ═══════════════════════════════════════════════════════════ --}}
+    <button type="button" id="btn-reabrir-seleccion"
+            class="btn btn-success shadow rounded-pill d-none"
+            style="position:fixed;bottom:24px;right:24px;z-index:1040;padding:11px 20px;font-weight:700;font-size:14px;">
+        <i class="fa-solid fa-cash-register me-2"></i>Pedidos / Proformas
+    </button>
+
 </div>
 
 @script
 <script>
     const modalSeleccion   = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalSeleccionarPedido'));
     const modalDetalleCaja = document.getElementById('modalDetalleCaja');
+    const fabReabrir       = document.getElementById('btn-reabrir-seleccion');
+
+    // Botón flotante: reabrir el modal de selección
+    if (fabReabrir) {
+        fabReabrir.addEventListener('click', () => abrirSeleccion());
+    }
 
     // Foco en el primer botón Cobrar dentro del modal
     const enfocarPrimerCobrar = () => {
@@ -1346,6 +1363,13 @@
     document.getElementById('modalSeleccionarPedido').addEventListener('hidden.bs.modal', () => {
         document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
         document.body.classList.remove('modal-open');
+        // Mostrar el botón flotante para reabrir el modal
+        if (fabReabrir) fabReabrir.classList.remove('d-none');
+    });
+
+    // Ocultar el botón flotante mientras el modal está abierto
+    document.getElementById('modalSeleccionarPedido').addEventListener('shown.bs.modal', () => {
+        if (fabReabrir) fabReabrir.classList.add('d-none');
     });
 
     $wire.on('abrirModalDetalleCaja', () => {

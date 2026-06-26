@@ -129,6 +129,20 @@
                             <span class="spinner-border spinner-border-sm"></span>
                         </span>
                     </button>
+                    <button type="button"
+                            class="btn btn-outline-info fw-semibold"
+                            wire:click="exportarFormato14()"
+                            wire:loading.attr="disabled"
+                            wire:target="exportarFormato14"
+                            title="Formato 14.1 - Registro de Ventas e Ingresos (SUNAT)"
+                            @if(($esSuperAdmin || $esAdmin) && !$idEmpresaActiva) disabled @endif>
+                        <span wire:loading.remove wire:target="exportarFormato14">
+                            <i class="fa fa-file-excel me-1"></i> Formato 14.1
+                        </span>
+                        <span wire:loading wire:target="exportarFormato14">
+                            <span class="spinner-border spinner-border-sm"></span>
+                        </span>
+                    </button>
                     @endcan
                 </div>
 

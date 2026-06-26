@@ -191,6 +191,20 @@ class ReporteVenta extends Component
         }
     }
 
+    public function exportarFormato14(): void
+    {
+        try {
+            if (!auth()->user()->can('reporte_ventas.exportar')) {
+                session()->flash('error', 'Acceso denegado. No tiene permisos para generar este reporte.');
+                return;
+            }
+            $url = route('reporte.formato_14_excel', $this->buildExportableParams());
+            $this->dispatch('abrirEnlaces', url: $url);
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+        }
+    }
+
     private function buildExportableParams(): array
     {
         return [

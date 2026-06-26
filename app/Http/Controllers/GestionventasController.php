@@ -110,6 +110,198 @@ class GestionventasController extends Controller
             </script>";
         }
     }
+    public function ventas_servicios()
+    {
+        try {
+
+            $opciones = $this->submenu->optiones_por_vista("ventas_servicios");
+
+            return view('gestionventas/ventas_servicios', compact('opciones'));
+        }catch (\Exception $e){
+            $this->logs->insertarLog($e);
+            echo "<script>
+                alert(\"Error Al Mostrar Contenido. Redireccionando Al Inicio\");
+                window.location.href = '" . route('admin') . "';
+            </script>";
+        }
+    }
+    public function guias_remision()
+    {
+        try {
+            $opciones   = $this->submenu->optiones_por_vista('guias_remision');
+            $pendientes = DB::table('guias_remision')->where('guia_estado', 1)->where('guia_estado_sunat', 0)->count();
+            return view('gestion-ventas.guias_remision', compact('opciones', 'pendientes'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function generar_guia()
+    {
+        try {
+            abort_if(!auth()->user()->can('guias_remision.listar'), 403);
+            $opciones = $this->submenu->optiones_por_vista('guias_remision');
+            return view('gestion-ventas.generar_guia', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function pendientes_guia()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista('guias_remision');
+            return view('gestion-ventas.pendientes_guia', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function imprimir_guia_pdf(\Illuminate\Http\Request $request)
+    {
+        try {
+            $idGuia = (int) ($request->input('id_guia') ?? 0);
+
+            $g = DB::table('guias_remision as gr')
+                ->leftJoin('empresa as e', 'e.id_empresa', '=', 'gr.id_empresa')
+                ->leftJoin('ubigeo as up', 'up.ubigeo_cod', '=', 'gr.guia_partida_ubigeo')
+                ->leftJoin('ubigeo as ul', 'ul.ubigeo_cod', '=', 'gr.guia_llegada_ubigeo')
+                ->where('gr.id_guia', $idGuia)
+                ->select('gr.*',
+                    'e.empresa_razon_social', 'e.empresa_ruc', 'e.empresa_domiciliofiscal', 'e.empresa_foto',
+                    DB::raw("CONCAT_WS(' / ', up.ubigeo_departamento, up.ubigeo_provincia, up.ubigeo_distrito) as ubigeo_part_txt"),
+                    DB::raw("CONCAT_WS(' / ', ul.ubigeo_departamento, ul.ubigeo_provincia, ul.ubigeo_distrito) as ubigeo_llega_txt"))
+                ->first();
+
+            if (!$g) abort(404, 'Guía no encontrada.');
+
+            $detalle = DB::table('guias_remision_detalle')->where('id_guia', $idGuia)->get();
+
+            $motivos = ['01'=>'01 - Venta','02'=>'02 - Compra','03'=>'03 - Venta con entrega a terceros',
+                '04'=>'04 - Traslado entre establecimientos','05'=>'05 - Consignación','06'=>'06 - Devolución','13'=>'13 - Otros'];
+            $motivo = $motivos[$g->guia_motivo_traslado] ?? $g->guia_motivo_traslado;
+            $modalidad = $g->guia_modalidad_traslado === '01' ? 'Público' : 'Privado';
+            $tipoGuia  = $g->guia_tipo === '31' ? 'TRANSPORTISTA' : 'REMITENTE';
+            $serieCompleta = $g->guia_numero ?: ($g->guia_serie . '-' . str_pad((string)$g->guia_correlativo, 8, '0', STR_PAD_LEFT));
+
+            $pdf = new PDFBufeo('P', 'mm', 'A4');
+            $pdf->SetMargins(10, 10, 10);
+            $pdf->SetAutoPageBreak(true, 15);
+            $pdf->AddPage();
+            $xL = 10; $W = 190;
+
+            // ── Encabezado ──
+            $ys = 10;
+            if ($g->empresa_foto && file_exists(public_path($g->empresa_foto))) {
+                $pdf->Image(public_path($g->empresa_foto), $xL, $ys, 45, 0);
+            }
+            $pdf->SetXY(58, $ys + 2);
+            $pdf->SetFont('Helvetica', 'B', 11);
+            $pdf->MultiCell(82, 5, utf8_decode($g->empresa_razon_social ?? ''), 0, 'C');
+            $pdf->SetX(58);
+            $pdf->SetFont('Helvetica', '', 7);
+            $pdf->MultiCell(82, 4, utf8_decode($g->empresa_domiciliofiscal ?? ''), 0, 'C');
+
+            $rx = 145; $rw = 55;
+            $pdf->SetDrawColor(80, 80, 80); $pdf->SetLineWidth(0.4);
+            $pdf->SetXY($rx, $ys);
+            $pdf->SetFont('Helvetica', 'B', 10);
+            $pdf->Cell($rw, 9, 'RUC ' . ($g->empresa_ruc ?? ''), 1, 1, 'C');
+            $pdf->SetX($rx);
+            $pdf->SetFont('Helvetica', 'B', 7);
+            $pdf->SetFillColor(230, 230, 230);
+            $pdf->Cell($rw, 5, utf8_decode('GUÍA DE REMISIÓN ELECTRÓNICA'), 1, 1, 'C', true);
+            $pdf->SetX($rx);
+            $pdf->Cell($rw, 5, $tipoGuia, 1, 1, 'C', true);
+            $pdf->SetFillColor(255, 255, 255);
+            $pdf->SetX($rx);
+            $pdf->SetFont('Helvetica', 'B', 13);
+            $pdf->Cell($rw, 11, $serieCompleta, 1, 1, 'C');
+
+            $pdf->SetY(max(38, $pdf->GetY()) + 3);
+            $pdf->SetLineWidth(0.4);
+            $pdf->Line($xL, $pdf->GetY(), $xL + $W, $pdf->GetY());
+            $pdf->Ln(3);
+
+            $bar = function ($label) use ($pdf, $xL) {
+                $pdf->SetFillColor(80, 80, 80); $pdf->SetTextColor(255, 255, 255);
+                $pdf->SetFont('Helvetica', 'B', 8); $pdf->SetX($xL);
+                $pdf->Cell(190, 6, utf8_decode(' ' . $label), 0, 1, 'L', true);
+                $pdf->SetFillColor(255, 255, 255); $pdf->SetTextColor(0, 0, 0); $pdf->Ln(1);
+            };
+            $linea = function ($et, $val, $w1 = 38, $w2 = 152, $ln = 1) use ($pdf, $xL) {
+                $pdf->SetX($xL);
+                $pdf->SetFont('Helvetica', 'B', 8); $pdf->Cell($w1, 5, utf8_decode($et), 0, 0, 'L');
+                $pdf->SetFont('Helvetica', '', 8);  $pdf->Cell($w2, 5, utf8_decode($val), 0, $ln, 'L');
+            };
+
+            // ── Datos generales ──
+            $bar('DATOS DE LA GUÍA');
+            $linea('Fecha de emisión:', $g->guia_fecha_emision ? date('d/m/Y', strtotime($g->guia_fecha_emision)) : '-');
+            $linea('Fecha de traslado:', $g->guia_fecha_traslado ? date('d/m/Y', strtotime($g->guia_fecha_traslado)) : '-');
+            $linea('Motivo de traslado:', $motivo);
+            $linea('Modalidad de transporte:', $modalidad);
+            if ($g->guia_observaciones) $linea('Observación:', $g->guia_observaciones);
+            $pdf->Ln(2);
+
+            // ── Destinatario ──
+            $bar('DATOS DEL DESTINATARIO');
+            $linea('Destinatario:', $g->guia_dest_nombre ?? '-');
+            $linea('N° Documento:', $g->guia_dest_numero_doc ?? '-');
+            if ($g->guia_dest_direccion) $linea('Dirección:', $g->guia_dest_direccion);
+            $pdf->Ln(2);
+
+            // ── Traslado ──
+            $bar('PUNTO DE PARTIDA Y LLEGADA');
+            $linea('Partida:', trim(($g->guia_partida_direccion ?? '') . '  —  ' . ($g->ubigeo_part_txt ?? '')));
+            $linea('Llegada:', trim(($g->guia_llegada_direccion ?? '') . '  —  ' . ($g->ubigeo_llega_txt ?? '')));
+            $linea('Peso bruto:', number_format((float)$g->guia_peso_bruto, 3) . ' ' . ($g->guia_unidad_medida ?? 'KGM') . '   |   Bultos: ' . ($g->guia_nro_bultos ?? '-'));
+            $pdf->Ln(2);
+
+            // ── Transporte ──
+            $bar('TRANSPORTE / CONDUCTOR / VEHÍCULO');
+            $linea('Transportista:', trim(($g->guia_transportista_ruc ?? '') . '  ' . ($g->guia_transportista_nombre ?? '')) ?: '-');
+            $linea('Vehículo (placa):', trim(($g->guia_vehiculo_placa ?? '') . '  ' . ($g->guia_vehiculo_marca ?? '')));
+            $linea('Conductor:', trim(($g->guia_conductor_nombre ?? '') . '  Lic: ' . ($g->guia_conductor_licencia ?? '') . '  Doc: ' . ($g->guia_conductor_numero_doc ?? '')));
+            $pdf->Ln(2);
+
+            // ── Bienes ──
+            $bar('BIENES A TRASLADAR');
+            $pdf->SetFont('Helvetica', 'B', 7.5);
+            $pdf->SetFillColor(220, 220, 220); $pdf->SetX($xL);
+            $cols = ['Código'=>24, 'Descripción'=>96, 'U.M.'=>16, 'Cant.'=>18, 'P.Unit'=>18, 'P.Total'=>18];
+            foreach ($cols as $h=>$w) $pdf->Cell($w, 6, utf8_decode($h), 1, 0, 'C', true);
+            $pdf->Ln();
+            $pdf->SetFillColor(255, 255, 255);
+            $pdf->SetFont('Helvetica', '', 7.5);
+            $pesoTotal = 0;
+            foreach ($detalle as $d) {
+                $pt = (float)$d->detalle_cantidad * (float)$d->detalle_peso_unitario;
+                $pesoTotal += $pt;
+                $pdf->SetX($xL);
+                $pdf->Cell(24, 5, utf8_decode(mb_strimwidth($d->detalle_codigo ?? '-', 0, 14, '..')), 1, 0, 'C');
+                $pdf->Cell(96, 5, utf8_decode(mb_strimwidth($d->detalle_descripcion ?? '', 0, 62, '..')), 1, 0, 'L');
+                $pdf->Cell(16, 5, $d->detalle_unidad_medida ?? '', 1, 0, 'C');
+                $pdf->Cell(18, 5, number_format((float)$d->detalle_cantidad, 2), 1, 0, 'R');
+                $pdf->Cell(18, 5, number_format((float)$d->detalle_peso_unitario, 3), 1, 0, 'R');
+                $pdf->Cell(18, 5, number_format($pt, 3), 1, 1, 'R');
+            }
+            $pdf->SetFont('Helvetica', 'B', 7.5);
+            $pdf->SetX($xL);
+            $pdf->Cell(172, 6, 'PESO TOTAL', 1, 0, 'R');
+            $pdf->Cell(18, 6, number_format($pesoTotal, 3), 1, 1, 'R');
+
+            $pdf->Output('I', 'guia-' . $serieCompleta . '.pdf');
+            exit;
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al generar el PDF de la guía.');window.close();</script>";
+        }
+    }
+
     public function registro_pagos()
     {
         try {

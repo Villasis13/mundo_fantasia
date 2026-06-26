@@ -89,6 +89,7 @@ Route::prefix('logistica')->middleware(['auth', 'verifyUserStatus'])->group(func
     route::get('/compras',[LogisticaController::class ,'compras'])->name('logistica.compras')->middleware('can:compras.submenu');
     route::get('/ordenCompraDetalle',[LogisticaController::class ,'ordenCompraDetalle'])->name('logistica.ordenCompraDetalle')->middleware('can:ordenCompraDetalle.submenu');
     route::get('/compras_pdf',[LogisticaController::class ,'compras_pdf'])->name('logistica.compras_pdf')->middleware('can:registro_compras.exportar');
+    route::get('/ingreso_compra_pdf',[LogisticaController::class ,'ingreso_compra_pdf'])->name('logistica.ingreso_compra_pdf')->middleware('can:historial_compras.exportar');
     route::get('/stock_establecimiento',[LogisticaController::class ,'stock_establecimiento'])->name('logistica.stock_establecimiento')->middleware('can:stock_establecimiento.submenu');
     route::get('/stock_consolidado',[LogisticaController::class ,'stock_consolidado'])->name('logistica.stock_consolidado')->middleware('can:stock_consolidado.submenu');
     route::get('/transferencias_stock',[LogisticaController::class ,'transferencias_stock'])->name('logistica.transferencias_stock')->middleware('can:transferencias_stock.submenu');
@@ -114,6 +115,11 @@ Route::prefix('logistica')->middleware(['auth', 'verifyUserStatus'])->group(func
 Route::prefix('Gestionventas')->middleware(['auth', 'verifyUserStatus'])->group(function () {
     route::get('/movimientos',[GestionventasController::class ,'movimientos'])->name('Gestionventas.movimientos')->middleware('can:movimientos.submenu');
     route::get('/realizar_ventas',[GestionventasController::class ,'realizar_ventas'])->name('Gestionventas.realizar_ventas')->middleware('can:realizar_ventas.submenu');
+    route::get('/ventas_servicios',[GestionventasController::class ,'ventas_servicios'])->name('Gestionventas.ventas_servicios')->middleware('can:ventas_servicios.submenu');
+    route::get('/guias_remision',[GestionventasController::class ,'guias_remision'])->name('Gestionventas.guias_remision')->middleware('can:guias_remision.submenu');
+    route::get('/generar_guia',[GestionventasController::class ,'generar_guia'])->name('Gestionventas.generar_guia')->middleware('can:guias_remision.submenu');
+    route::get('/pendientes_guia',[GestionventasController::class ,'pendientes_guia'])->name('Gestionventas.pendientes_guia')->middleware('can:guias_remision.submenu');
+    route::get('/imprimir_guia_pdf',[GestionventasController::class ,'imprimir_guia_pdf'])->name('Gestionventas.imprimir_guia_pdf')->middleware('can:guias_remision.listar');
     route::get('/clientes',[GestionventasController::class ,'clientes'])->name('Gestionventas.clientes')->middleware('can:clientes.submenu');
     route::get('/exportar_clientes_excel',[GestionventasController::class ,'exportarClientesExcel'])->name('Gestionventas.exportar_clientes_excel')->middleware('can:clientes.submenu');
     route::get('/registro_pagos',[GestionventasController::class ,'registro_pagos'])->name('Gestionventas.registro_pagos')->middleware('can:registro_pagos.submenu');
@@ -178,6 +184,26 @@ Route::prefix('cxc')->middleware(['auth', 'verifyUserStatus'])->group(function (
 /* ======================== REPORTE - INICIO ========================*/
 Route::prefix('reporte')->middleware(['auth', 'verifyUserStatus'])->group(function () {
     route::get('/reporte_de_ventas',[ReporteController::class ,'reporte_de_ventas'])->name('reporte.reporte_de_ventas')->middleware('can:reporte_de_ventas.submenu');
+    route::get('/reporte_ventas_tipo_pago',[ReporteController::class ,'reporteVentasTipoPago'])->name('reporte.reporte_ventas_tipo_pago')->middleware('can:reporte_ventas_tipo_pago.submenu');
+    route::get('/reporte_utilidad',[ReporteController::class ,'reporteUtilidad'])->name('reporte.reporte_utilidad')->middleware('can:reporte_utilidad.submenu');
+    route::get('/reporte_movimientos',[ReporteController::class ,'reporteMovimientos'])->name('reporte.reporte_movimientos')->middleware('can:reporte_movimientos.submenu');
+    route::get('/reporte_lista_precios',[ReporteController::class ,'reporteListaPrecios'])->name('reporte.reporte_lista_precios')->middleware('can:reporte_lista_precios.submenu');
+    route::get('/reporte_stock_minimo',[ReporteController::class ,'reporteStockMinimo'])->name('reporte.reporte_stock_minimo')->middleware('can:reporte_stock_minimo.submenu');
+    route::get('/reporte_series_productos',[ReporteController::class ,'reporteSeriesProductos'])->name('reporte.reporte_series_productos')->middleware('can:reporte_series_productos.submenu');
+    route::get('/formato_14_excel',[ReporteController::class ,'formato14Excel'])->name('reporte.formato_14_excel')->middleware('can:reporte_ventas.exportar');
+    // Exportaciones de los reportes nuevos (PDF / Excel)
+    route::get('/reporte_ventas_tipo_pago/pdf',  [ReporteController::class ,'tipoPagoPdf'])->name('reporte.tipo_pago_pdf')->middleware('can:reporte_ventas_tipo_pago.exportar');
+    route::get('/reporte_ventas_tipo_pago/excel',[ReporteController::class ,'tipoPagoExcel'])->name('reporte.tipo_pago_excel')->middleware('can:reporte_ventas_tipo_pago.exportar');
+    route::get('/reporte_utilidad/pdf',  [ReporteController::class ,'utilidadPdf'])->name('reporte.utilidad_pdf')->middleware('can:reporte_utilidad.exportar');
+    route::get('/reporte_utilidad/excel',[ReporteController::class ,'utilidadExcel'])->name('reporte.utilidad_excel')->middleware('can:reporte_utilidad.exportar');
+    route::get('/reporte_movimientos/pdf',  [ReporteController::class ,'movimientosPdf'])->name('reporte.movimientos_pdf')->middleware('can:reporte_movimientos.exportar');
+    route::get('/reporte_movimientos/excel',[ReporteController::class ,'movimientosExcel'])->name('reporte.movimientos_excel')->middleware('can:reporte_movimientos.exportar');
+    route::get('/reporte_lista_precios/pdf',  [ReporteController::class ,'listaPreciosPdf'])->name('reporte.lista_precios_pdf')->middleware('can:reporte_lista_precios.exportar');
+    route::get('/reporte_lista_precios/excel',[ReporteController::class ,'listaPreciosExcel'])->name('reporte.lista_precios_excel')->middleware('can:reporte_lista_precios.exportar');
+    route::get('/reporte_stock_minimo/pdf',  [ReporteController::class ,'stockMinimoPdf'])->name('reporte.stock_minimo_pdf')->middleware('can:reporte_stock_minimo.exportar');
+    route::get('/reporte_stock_minimo/excel',[ReporteController::class ,'stockMinimoExcel'])->name('reporte.stock_minimo_excel')->middleware('can:reporte_stock_minimo.exportar');
+    route::get('/reporte_series_productos/pdf',  [ReporteController::class ,'seriesPdf'])->name('reporte.series_pdf')->middleware('can:reporte_series_productos.exportar');
+    route::get('/reporte_series_productos/excel',[ReporteController::class ,'seriesExcel'])->name('reporte.series_excel')->middleware('can:reporte_series_productos.exportar');
     route::get('/control_pagos_de_cuotas',[ReporteController::class ,'control_pagos_de_cuotas'])->name('reporte.control_pagos_de_cuotas')->middleware('can:control_pagos_de_cuotas.submenu');
     route::get('/ventas_por_vendedor',[ReporteController::class ,'ventas_por_vendedor'])->name('reporte.ventas_por_vendedor')->middleware('can:ventas_por_vendedor.submenu');
     route::get('/ventas_por_cliente',[ReporteController::class ,'ventas_por_cliente'])->name('reporte.ventas_por_cliente')->middleware('can:ventas_por_cliente.submenu');

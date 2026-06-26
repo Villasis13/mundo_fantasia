@@ -59,6 +59,497 @@ class ReporteController extends Controller
     }
 
 
+    public function formato14Excel(Request $request)
+    {
+        try {
+            $idEmpresa  = (int) $request->get('id_empresa', 0);
+            $idSucursal = (int) $request->get('id_sucursal', 0);
+            $desde      = $request->get('desde');
+            $hasta      = $request->get('hasta');
+
+            $meses = [1=>'ENERO',2=>'FEBRERO',3=>'MARZO',4=>'ABRIL',5=>'MAYO',6=>'JUNIO',
+                7=>'JULIO',8=>'AGOSTO',9=>'SEPTIEMBRE',10=>'OCTUBRE',11=>'NOVIEMBRE',12=>'DICIEMBRE'];
+
+            $empresa     = DB::table('empresa')->where('id_empresa', $idEmpresa)->first();
+            $rucEmpresa  = $empresa->empresa_ruc ?? '';
+            $nomEmpresa  = $empresa->empresa_razon_social ?? '';
+            $fi = Carbon::parse($desde); $ff = Carbon::parse($hasta);
+            $periodoIni = $meses[$fi->month] . ' ' . $fi->year;
+            $periodoFin = $meses[$ff->month] . ' ' . $ff->year;
+
+            // ── Ventas del período ──
+            $query = DB::table('ventas as v')
+                ->join('clientes as c', 'c.id_clientes', '=', 'v.id_clientes')
+                ->leftJoin('tipo_documento as td', 'td.id_tipo_documento', '=', 'c.id_tipo_documento')
+                ->leftJoin('ventas_anulados as va', 'va.id_venta', '=', 'v.id_venta')
+                ->whereNull('va.id_venta')
+                ->whereIn('v.venta_tipo', ['01', '03', '07', '08'])
+                ->whereDate('v.venta_fecha', '>=', $desde)
+                ->whereDate('v.venta_fecha', '<=', $hasta);
+
+            if ($idSucursal > 0) {
+                $query->where('v.id_sucursal', $idSucursal);
+            } elseif ($idEmpresa) {
+                $query->where('v.id_empresa', $idEmpresa);
+            }
+
+            $ventas = $query->orderBy('v.venta_fecha')->orderBy('v.venta_serie')->orderBy('v.venta_correlativo')
+                ->select(
+                    'v.venta_fecha', 'v.venta_tipo', 'v.venta_serie', 'v.venta_correlativo',
+                    'v.venta_totalexonerada', 'v.venta_totalinafecta', 'v.venta_totaligv',
+                    'v.venta_totalgravada', 'v.venta_total',
+                    'td.tipodocumento_codigo',
+                    'c.cliente_numero', 'c.cliente_razonsocial', 'c.cliente_nombre'
+                )->get();
+
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+
+            foreach (['A'=>18,'B'=>20,'E'=>15,'I'=>35,'M'=>15] as $col=>$w) $sheet->getColumnDimension($col)->setWidth($w);
+            foreach (['C','D','F','G','H','J','K','L','N','O','P','Q','R','S','T','U'] as $col) $sheet->getColumnDimension($col)->setAutoSize(true);
+
+            $sheet->setCellValue('A1', 'Formato 14.1- Registro de Ventas e Ingresos');
+            $sheet->setCellValue('A2', 'Periodo:');
+            $sheet->setCellValue('A3', 'RUC:');
+            $sheet->setCellValue('A4', 'Razón Social:');
+            $sheet->setCellValue('A5', 'Expresado en:');
+            $sheet->getStyle('A1:A5')->getFont()->setBold(true);
+            $sheet->setCellValue('B2', "DESDE $periodoIni HASTA $periodoFin");
+            $sheet->setCellValueExplicit('B3', $rucEmpresa, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue('B4', $nomEmpresa);
+            $sheet->setCellValue('B5', 'SOLES');
+            $sheet->getStyle('B2:B5')->getFont()->setBold(true);
+
+            // Encabezados
+            $sheet->setCellValue('A7', 'NUMERO CORRELATIVO');
+            $sheet->setCellValue('B7', 'FECHA DE EMISION');
+            $sheet->setCellValue('C7', 'FECHA VMTO/PAGO');
+            $sheet->mergeCells('D7:F7'); $sheet->setCellValue('D7', 'COMPROBANTE DE PAGO O DOCUMENTO');
+            $sheet->setCellValue('D8', 'TIPO'); $sheet->setCellValue('E8', 'SERIE'); $sheet->setCellValue('F8', 'NUMERO');
+            $sheet->mergeCells('G7:I7'); $sheet->setCellValue('G7', 'INFORMACION DEL CLIENTE');
+            $sheet->setCellValue('G8', 'TIPO DOC.'); $sheet->setCellValue('H8', 'NUMERO'); $sheet->setCellValue('I8', 'APELLIDOS Y NOMBRES O RAZON SOCIAL');
+            $sheet->setCellValue('J7', 'BASE IMPONIBLE GRAVADA');
+            $sheet->setCellValue('K7', 'EXONERADA'); $sheet->setCellValue('L7', 'INAFECTA');
+            $sheet->setCellValue('M7', 'IGV Y/O IPM'); $sheet->setCellValue('N7', 'OTROS TRIBUTOS');
+            $sheet->setCellValue('O7', 'IMPORTE TOTAL');
+            $sheet->setCellValue('P7', 'TIPO DE CAMBIO');
+            $sheet->mergeCells('Q7:U7'); $sheet->setCellValue('Q7', 'REFERENCIA DEL COMPROBANTE ORIGINAL QUE SE MODIFICA');
+            $sheet->setCellValue('Q8', 'FECHA'); $sheet->setCellValue('R8', 'TIPO'); $sheet->setCellValue('S8', 'SERIE'); $sheet->setCellValue('T8', 'NUMERO'); $sheet->setCellValue('U8', 'PORC.IGV');
+            $sheet->getStyle('A7:U8')->getFont()->setBold(true);
+            $sheet->getStyle('A7:U8')->getAlignment()->setHorizontal('center')->setWrapText(true);
+            $sheet->getStyle('A7:U8')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+            $sheet->freezePane('A9');
+
+            $fila = 9;
+            $totalGeneral = 0;
+            $mapaDoc = ['2' => '1', '4' => '6']; // interno DNI(2)->1, RUC(4)->6 (código SUNAT)
+
+            foreach ($ventas as $v) {
+                $signo = $v->venta_tipo === '07' ? -1 : 1; // nota de crédito resta
+                $gravada   = $signo * (float) $v->venta_totalgravada;
+                $exonerada = $signo * (float) $v->venta_totalexonerada;
+                $inafecta  = $signo * (float) $v->venta_totalinafecta;
+                $igv       = $signo * (float) $v->venta_totaligv;
+                $total     = $signo * (float) $v->venta_total;
+                $totalGeneral += $total;
+
+                $codDoc = $mapaDoc[(string) ($v->tipodocumento_codigo ?? '')] ?? ($v->tipodocumento_codigo ?? '');
+                $cliente = $v->cliente_razonsocial ?: $v->cliente_nombre;
+
+                $sheet->setCellValue('A'.$fila, $v->venta_serie.'-'.str_pad((string)$v->venta_correlativo, 8, '0', STR_PAD_LEFT));
+                $sheet->setCellValue('B'.$fila, Carbon::parse($v->venta_fecha)->format('d/m/Y'));
+                $sheet->setCellValueExplicit('D'.$fila, $v->venta_tipo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('E'.$fila, $v->venta_serie, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('F'.$fila, (string)$v->venta_correlativo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('G'.$fila, (string)$codDoc, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit('H'.$fila, (string)$v->cliente_numero, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('I'.$fila, $cliente);
+                foreach (['J'=>$gravada,'K'=>$exonerada,'L'=>$inafecta,'M'=>$igv,'N'=>0.00,'O'=>$total,'U'=>0.00] as $col=>$val) {
+                    $sheet->setCellValue($col.$fila, $val);
+                    $sheet->getStyle($col.$fila)->getNumberFormat()->setFormatCode('#,##0.00');
+                }
+                $fila++;
+            }
+
+            $sheet->getStyle('A'.$fila.':U'.$fila)->getBorders()->getTop()->setBorderStyle(Border::BORDER_THIN);
+            $sheet->setCellValue('O'.$fila, $totalGeneral);
+            $sheet->getStyle('O'.$fila)->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle('O'.$fila)->applyFromArray([
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D3D3D3']],
+                'font' => ['bold' => true],
+            ]);
+
+            $writer   = new Xlsx($spreadsheet);
+            $fileName = 'reporte_formato_14.1_' . $desde . ' a ' . $hasta . '.xlsx';
+
+            return response()->streamDownload(function () use ($writer) {
+                $writer->save('php://output');
+            }, $fileName, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al generar el Formato 14.1.');window.close();</script>";
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  EXPORTACIÓN GENÉRICA (PDF / EXCEL) PARA LOS REPORTES NUEVOS
+    // ════════════════════════════════════════════════════════════
+    private function pdfTabla(string $titulo, array $headers, array $widths, array $rows, string $filename)
+    {
+        $pdf = new PDFBufeo('L', 'mm', 'A4');
+        $pdf->SetMargins(8, 10, 8);
+        $pdf->SetAutoPageBreak(true, 12);
+        $pdf->AddPage();
+        $pdf->AliasNbPages();
+
+        $pdf->SetFont('Helvetica', 'B', 12);
+        $pdf->Cell(0, 7, utf8_decode($titulo), 0, 1, 'C');
+        $pdf->Ln(1);
+
+        $pdf->SetFont('Helvetica', 'B', 7);
+        $pdf->SetFillColor(30, 58, 95);
+        $pdf->SetTextColor(255, 255, 255);
+        foreach ($headers as $i => $h) {
+            $pdf->Cell($widths[$i], 7, utf8_decode($h), 1, 0, 'C', true);
+        }
+        $pdf->Ln();
+
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->SetFont('Helvetica', '', 7);
+        $pdf->SetWidths($widths);
+        foreach ($rows as $r) {
+            $pdf->Row(array_map(fn($c) => utf8_decode((string) $c), array_values($r)));
+        }
+
+        // Mostrar inline en el navegador (pestaña nueva), no descargar
+        $pdf->Output('I', $filename);
+        exit;
+    }
+
+    private function excelTabla(string $titulo, array $headers, array $rows, string $filename)
+    {
+        $ss = new Spreadsheet();
+        $sh = $ss->getActiveSheet();
+
+        $sh->setCellValue('A1', $titulo);
+        $sh->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+
+        $sh->fromArray($headers, null, 'A3');
+        $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+        $sh->getStyle("A3:{$lastCol}3")->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1E3A5F']],
+        ]);
+
+        $sh->fromArray(array_map('array_values', $rows), null, 'A4');
+        for ($i = 1; $i <= count($headers); $i++) {
+            $sh->getColumnDimensionByColumn($i)->setAutoSize(true);
+        }
+
+        $writer = new Xlsx($ss);
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+    }
+
+    // ── 67: Ventas por Tipo de Pago ──
+    private function dataTipoPago(Request $r): array
+    {
+        $idEmpresa = (int) $r->get('id_empresa', 0);
+        $idSucursal = (int) $r->get('id_sucursal', 0);
+        $desde = $r->get('desde'); $hasta = $r->get('hasta');
+
+        $q = DB::table('ventas_detalle_pagos as vdp')
+            ->join('ventas as v', 'v.id_venta', '=', 'vdp.id_venta')
+            ->join('tipo_pago as tp', 'tp.id_tipo_pago', '=', 'vdp.id_tipo_pago')
+            ->leftJoin('ventas_anulados as va', 'va.id_venta', '=', 'v.id_venta')
+            ->whereNull('va.id_venta')->where('vdp.venta_detalle_pago_estado', 1)
+            ->whereIn('v.venta_tipo', ['01', '03', '20'])
+            ->whereDate('v.venta_fecha', '>=', $desde)->whereDate('v.venta_fecha', '<=', $hasta);
+        if ($idSucursal > 0) $q->where('v.id_sucursal', $idSucursal);
+        elseif ($idEmpresa) $q->where('v.id_empresa', $idEmpresa);
+
+        $datos = $q->groupBy('tp.id_tipo_pago', 'tp.tipo_pago_nombre')
+            ->select('tp.tipo_pago_nombre', DB::raw('COUNT(DISTINCT v.id_venta) as num_operaciones'),
+                     DB::raw('SUM(vdp.venta_detalle_pago_monto) as total'))
+            ->orderByDesc('total')->get();
+
+        $totalGen = (float) $datos->sum('total');
+        $rows = $datos->map(fn($f) => [
+            $f->tipo_pago_nombre, $f->num_operaciones, number_format($f->total, 2),
+            ($totalGen > 0 ? number_format($f->total / $totalGen * 100, 1) : '0.0') . '%',
+        ])->toArray();
+
+        return [
+            'titulo'  => 'Reporte de Ventas por Tipo de Pago (' . $desde . ' a ' . $hasta . ')',
+            'headers' => ['Tipo de Pago', 'N° Operaciones', 'Total (S/)', '% Particip.'],
+            'widths'  => [130, 50, 50, 50],
+            'rows'    => $rows,
+            'filebase'=> 'ventas_tipo_pago_' . $desde . '_' . $hasta,
+        ];
+    }
+    public function tipoPagoPdf(Request $r)   { $d = $this->dataTipoPago($r); return $this->pdfTabla($d['titulo'], $d['headers'], $d['widths'], $d['rows'], $d['filebase'] . '.pdf'); }
+    public function tipoPagoExcel(Request $r) { $d = $this->dataTipoPago($r); return $this->excelTabla($d['titulo'], $d['headers'], $d['rows'], $d['filebase'] . '.xlsx'); }
+
+    // ── 68: Utilidad de Ventas vs Costo ──
+    private function dataUtilidad(Request $r): array
+    {
+        $idEmpresa = (int) $r->get('id_empresa', 0);
+        $idSucursal = (int) $r->get('id_sucursal', 0);
+        $desde = $r->get('desde'); $hasta = $r->get('hasta'); $buscar = trim((string) $r->get('q', ''));
+        $costoExpr = 'COALESCE(p.pro_costo_total, p.pro_costo_base, 0)';
+
+        $q = DB::table('ventas_detalle as vd')
+            ->join('ventas as v', 'v.id_venta', '=', 'vd.id_venta')
+            ->leftJoin('ventas_anulados as va', 'va.id_venta', '=', 'v.id_venta')
+            ->leftJoin('productos as p', 'p.id_pro', '=', 'vd.id_pro')
+            ->whereNull('va.id_venta')->whereIn('v.venta_tipo', ['01', '03', '20'])
+            ->whereDate('v.venta_fecha', '>=', $desde)->whereDate('v.venta_fecha', '<=', $hasta);
+        if ($idSucursal > 0) $q->where('v.id_sucursal', $idSucursal);
+        elseif ($idEmpresa) $q->where('v.id_empresa', $idEmpresa);
+        if ($buscar !== '') $q->where(fn($w) => $w->where('vd.venta_detalle_nombre_producto', 'like', "%$buscar%")->orWhere('p.pro_codigo', 'like', "%$buscar%"));
+
+        $datos = $q->groupBy('vd.id_pro', 'vd.venta_detalle_nombre_producto', 'p.pro_codigo')
+            ->select('vd.venta_detalle_nombre_producto as producto', 'p.pro_codigo',
+                DB::raw('SUM(vd.venta_detalle_cantidad) as cantidad'),
+                DB::raw('SUM(vd.venta_detalle_importe_total) as total_venta'),
+                DB::raw("SUM(vd.venta_detalle_cantidad * {$costoExpr}) as total_costo"),
+                DB::raw("SUM(vd.venta_detalle_importe_total - (vd.venta_detalle_cantidad * {$costoExpr})) as utilidad"))
+            ->orderByDesc('utilidad')->get();
+
+        $rows = $datos->map(fn($f) => [
+            $f->producto, $f->pro_codigo ?? '-', number_format($f->cantidad, 2),
+            number_format($f->total_venta, 2), number_format($f->total_costo, 2), number_format($f->utilidad, 2),
+            ($f->total_venta > 0 ? number_format($f->utilidad / $f->total_venta * 100, 1) : '0.0') . '%',
+        ])->toArray();
+
+        return [
+            'titulo'  => 'Reporte de Utilidad de Ventas vs Costo (' . $desde . ' a ' . $hasta . ')',
+            'headers' => ['Producto', 'Código', 'Cant.', 'Venta', 'Costo', 'Utilidad', 'Margen'],
+            'widths'  => [95, 30, 25, 35, 35, 35, 26],
+            'rows'    => $rows,
+            'filebase'=> 'utilidad_ventas_' . $desde . '_' . $hasta,
+        ];
+    }
+    public function utilidadPdf(Request $r)   { $d = $this->dataUtilidad($r); return $this->pdfTabla($d['titulo'], $d['headers'], $d['widths'], $d['rows'], $d['filebase'] . '.pdf'); }
+    public function utilidadExcel(Request $r) { $d = $this->dataUtilidad($r); return $this->excelTabla($d['titulo'], $d['headers'], $d['rows'], $d['filebase'] . '.xlsx'); }
+
+    // ── 71: Movimientos de Productos ──
+    private function dataMovimientos(Request $r): array
+    {
+        $idEmpresa = (int) $r->get('id_empresa', 0);
+        $idSucursal = (int) $r->get('id_sucursal', 0);
+        $desde = $r->get('desde'); $hasta = $r->get('hasta');
+        $tipo = trim((string) $r->get('tipo', '')); $buscar = trim((string) $r->get('q', ''));
+
+        $q = DB::table('movimientos_productos_detalle as d')
+            ->join('movimientos_productos as m', 'm.id_movimientos_productos', '=', 'd.id_movimientos_productos')
+            ->leftJoin('productos as p', 'p.id_pro', '=', 'd.id_pro')
+            ->leftJoin('tiendas as t', 't.id_tienda', '=', 'm.id_sucursal')
+            ->where('m.movimientos_productos_estado', 1)
+            ->whereDate('m.movimientos_productos_fecha', '>=', $desde)->whereDate('m.movimientos_productos_fecha', '<=', $hasta);
+        if ($idSucursal > 0) $q->where('m.id_sucursal', $idSucursal);
+        elseif ($idEmpresa) $q->where('t.id_empresa', $idEmpresa);
+        if ($tipo !== '') $q->where('m.movimientos_productos_tipo', (int) $tipo);
+        if ($buscar !== '') $q->where(fn($w) => $w->where('p.pro_nombre', 'like', "%$buscar%")->orWhere('p.pro_codigo', 'like', "%$buscar%"));
+
+        $datos = $q->select('m.movimientos_productos_fecha as fecha', 'm.movimientos_productos_tipo as tipo',
+            'm.movimientos_productos_motivo as motivo', 'p.pro_nombre', 'p.pro_codigo', 't.tienda_nombre',
+            DB::raw('CAST(d.movimientos_productos_detalle_cantidad AS DECIMAL(14,2)) as cantidad'), 'd.costo_unitario')
+            ->orderByDesc('m.movimientos_productos_fecha')->orderByDesc('m.id_movimientos_productos')->get();
+
+        $rows = $datos->map(fn($m) => [
+            \Carbon\Carbon::parse($m->fecha)->format('d/m/Y'),
+            $m->tipo == 1 ? 'Ingreso' : 'Salida',
+            $m->motivo, $m->pro_nombre ?? '-', $m->pro_codigo ?? '-', $m->tienda_nombre ?? '-',
+            number_format($m->cantidad, 2), number_format($m->costo_unitario, 2),
+        ])->toArray();
+
+        return [
+            'titulo'  => 'Reporte de Movimientos de Productos (' . $desde . ' a ' . $hasta . ')',
+            'headers' => ['Fecha', 'Tipo', 'Motivo', 'Producto', 'Código', 'Sucursal', 'Cant.', 'Costo U.'],
+            'widths'  => [22, 20, 55, 70, 28, 35, 22, 29],
+            'rows'    => $rows,
+            'filebase'=> 'movimientos_productos_' . $desde . '_' . $hasta,
+        ];
+    }
+    public function movimientosPdf(Request $r)   { $d = $this->dataMovimientos($r); return $this->pdfTabla($d['titulo'], $d['headers'], $d['widths'], $d['rows'], $d['filebase'] . '.pdf'); }
+    public function movimientosExcel(Request $r) { $d = $this->dataMovimientos($r); return $this->excelTabla($d['titulo'], $d['headers'], $d['rows'], $d['filebase'] . '.xlsx'); }
+
+    // ── 72: Lista de Precios ──
+    private function dataListaPrecios(Request $r): array
+    {
+        $idEmpresa = (int) $r->get('id_empresa', 0);
+        $idSucursal = (int) $r->get('id_sucursal', 0);
+        $buscar = trim((string) $r->get('q', ''));
+
+        $q = DB::table('producto_sucursal as ps')
+            ->join('productos as p', 'p.id_pro', '=', 'ps.id_pro')
+            ->join('tiendas as t', 't.id_tienda', '=', 'ps.id_tienda')
+            ->where('ps.ps_estado', 1)->where('p.pro_estado', 1);
+        if ($idSucursal > 0) $q->where('ps.id_tienda', $idSucursal);
+        elseif ($idEmpresa) $q->where('t.id_empresa', $idEmpresa);
+        if ($buscar !== '') $q->where(fn($w) => $w->where('p.pro_nombre', 'like', "%$buscar%")->orWhere('p.pro_codigo', 'like', "%$buscar%")->orWhere('p.pro_marca', 'like', "%$buscar%"));
+
+        $datos = $q->select('p.pro_nombre', 'p.pro_codigo', 'p.pro_marca', 'p.pro_costo_total',
+            'ps.ps_precio_uni', 'ps.ps_precio_uni_2', 'ps.ps_precio_uni_3', 'ps.ps_stock', 't.tienda_nombre')
+            ->orderBy('p.pro_nombre')->get();
+
+        $rows = $datos->map(fn($f) => [
+            $f->pro_nombre, $f->pro_codigo ?? '-', $f->pro_marca ?? '-', $f->tienda_nombre,
+            number_format($f->pro_costo_total, 2), number_format($f->ps_precio_uni, 2),
+            number_format($f->ps_precio_uni_2, 2), number_format($f->ps_precio_uni_3, 2), number_format($f->ps_stock, 2),
+        ])->toArray();
+
+        return [
+            'titulo'  => 'Reporte Lista de Precios',
+            'headers' => ['Producto', 'Código', 'Marca', 'Sucursal', 'Costo', 'P.Público', 'P.Mayorista', 'P.3', 'Stock'],
+            'widths'  => [62, 28, 30, 35, 26, 26, 28, 22, 24],
+            'rows'    => $rows,
+            'filebase'=> 'lista_precios_' . now()->format('Ymd'),
+        ];
+    }
+    public function listaPreciosPdf(Request $r)   { $d = $this->dataListaPrecios($r); return $this->pdfTabla($d['titulo'], $d['headers'], $d['widths'], $d['rows'], $d['filebase'] . '.pdf'); }
+    public function listaPreciosExcel(Request $r) { $d = $this->dataListaPrecios($r); return $this->excelTabla($d['titulo'], $d['headers'], $d['rows'], $d['filebase'] . '.xlsx'); }
+
+    // ── 73: Stock Mínimo ──
+    private function dataStockMinimo(Request $r): array
+    {
+        $idEmpresa = (int) $r->get('id_empresa', 0);
+        $idSucursal = (int) $r->get('id_sucursal', 0);
+        $buscar = trim((string) $r->get('q', ''));
+
+        $q = DB::table('producto_sucursal as ps')
+            ->join('productos as p', 'p.id_pro', '=', 'ps.id_pro')
+            ->join('tiendas as t', 't.id_tienda', '=', 'ps.id_tienda')
+            ->where('ps.ps_estado', 1)->where('p.pro_estado', 1)
+            ->where('ps.ps_stock_minimo', '>', 0)->whereColumn('ps.ps_stock', '<=', 'ps.ps_stock_minimo');
+        if ($idSucursal > 0) $q->where('ps.id_tienda', $idSucursal);
+        elseif ($idEmpresa) $q->where('t.id_empresa', $idEmpresa);
+        if ($buscar !== '') $q->where(fn($w) => $w->where('p.pro_nombre', 'like', "%$buscar%")->orWhere('p.pro_codigo', 'like', "%$buscar%"));
+
+        $datos = $q->select('p.pro_nombre', 'p.pro_codigo', 'ps.ps_stock', 'ps.ps_stock_minimo', 't.tienda_nombre',
+            DB::raw('(ps.ps_stock_minimo - ps.ps_stock) as faltante'))->orderByDesc('faltante')->get();
+
+        $rows = $datos->map(fn($f) => [
+            $f->pro_nombre, $f->pro_codigo ?? '-', $f->tienda_nombre,
+            number_format($f->ps_stock, 2), number_format($f->ps_stock_minimo, 2), number_format($f->faltante, 2),
+        ])->toArray();
+
+        return [
+            'titulo'  => 'Reporte de Productos con Stock <= Mínimo',
+            'headers' => ['Producto', 'Código', 'Sucursal', 'Stock Actual', 'Stock Mínimo', 'Faltante'],
+            'widths'  => [85, 35, 45, 35, 35, 30],
+            'rows'    => $rows,
+            'filebase'=> 'stock_minimo_' . now()->format('Ymd'),
+        ];
+    }
+    public function stockMinimoPdf(Request $r)   { $d = $this->dataStockMinimo($r); return $this->pdfTabla($d['titulo'], $d['headers'], $d['widths'], $d['rows'], $d['filebase'] . '.pdf'); }
+    public function stockMinimoExcel(Request $r) { $d = $this->dataStockMinimo($r); return $this->excelTabla($d['titulo'], $d['headers'], $d['rows'], $d['filebase'] . '.xlsx'); }
+
+    // ── 74: Series de Productos ──
+    private function dataSeries(Request $r): array
+    {
+        $idEmpresa = (int) $r->get('id_empresa', 0);
+        $buscar = trim((string) $r->get('q', '')); $estado = trim((string) $r->get('estado', ''));
+
+        $q = DB::table('producto_series as s')
+            ->join('productos as p', 'p.id_pro', '=', 's.id_pro')
+            ->leftJoin('users as u', 'u.id_users', '=', 's.id_users');
+        if ($idEmpresa) $q->where('p.id_empresa', $idEmpresa);
+        if ($buscar !== '') $q->where(fn($w) => $w->where('s.numero_serie', 'like', "%$buscar%")->orWhere('p.pro_nombre', 'like', "%$buscar%")->orWhere('p.pro_codigo', 'like', "%$buscar%"));
+        if ($estado !== '') $q->where('s.estado', (int) $estado);
+
+        $datos = $q->select('s.numero_serie', 's.estado', 's.observacion', 's.id_venta', 's.id_orden_compra',
+            's.created_at', 'p.pro_nombre', 'p.pro_codigo', 'u.nombre_users')
+            ->orderByDesc('s.id_producto_serie')->get();
+
+        $rows = $datos->map(fn($s) => [
+            $s->numero_serie, $s->pro_nombre, $s->pro_codigo ?? '-',
+            $s->estado == 2 ? 'Vendido' : 'Disponible',
+            $s->id_venta ? 'Venta #' . $s->id_venta : ($s->id_orden_compra ? 'Compra #' . $s->id_orden_compra : '-'),
+            $s->observacion ?? '-', $s->nombre_users ?? '-',
+            $s->created_at ? \Carbon\Carbon::parse($s->created_at)->format('d/m/Y') : '-',
+        ])->toArray();
+
+        return [
+            'titulo'  => 'Reporte de Series de Productos',
+            'headers' => ['N° Serie', 'Producto', 'Código', 'Estado', 'Origen', 'Observación', 'Usuario', 'Fecha'],
+            'widths'  => [38, 60, 26, 26, 30, 45, 30, 26],
+            'rows'    => $rows,
+            'filebase'=> 'series_productos_' . now()->format('Ymd'),
+        ];
+    }
+    public function seriesPdf(Request $r)   { $d = $this->dataSeries($r); return $this->pdfTabla($d['titulo'], $d['headers'], $d['widths'], $d['rows'], $d['filebase'] . '.pdf'); }
+    public function seriesExcel(Request $r) { $d = $this->dataSeries($r); return $this->excelTabla($d['titulo'], $d['headers'], $d['rows'], $d['filebase'] . '.xlsx'); }
+
+    public function reporteSeriesProductos()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("reporte_series_productos");
+            return view('reporte/reporte_series_productos', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function reporteMovimientos()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("reporte_movimientos");
+            return view('reporte/reporte_movimientos', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function reporteListaPrecios()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("reporte_lista_precios");
+            return view('reporte/reporte_lista_precios', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function reporteStockMinimo()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("reporte_stock_minimo");
+            return view('reporte/reporte_stock_minimo', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function reporteVentasTipoPago()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("reporte_ventas_tipo_pago");
+            return view('reporte/reporte_ventas_tipo_pago', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function reporteUtilidad()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("reporte_utilidad");
+            return view('reporte/reporte_utilidad', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar el contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
     public function reporte_de_ventas()
     {
         try {

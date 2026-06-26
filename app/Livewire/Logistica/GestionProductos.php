@@ -145,9 +145,7 @@ class GestionProductos extends Component
             'idTipoAfectacion'   => 'required|integer|exists:tipo_afectacion,id_tipo_afectacion',
             'proNombre'      => 'required|string|max:255',
             'proCodigo'      => "required|string|max:100|unique:productos,pro_codigo{$ignore}",
-            'proDescripcion' => 'nullable|string|max:500',
             'proMarca'       => 'nullable|string|max:150',
-            'proFoto'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:2048',
         ];
 
         return $rules;
@@ -162,8 +160,6 @@ class GestionProductos extends Component
             'proNombre.required'      => 'El nombre del producto es obligatorio.',
             'proCodigo.required'      => 'El código del producto es obligatorio.',
             'proCodigo.unique'        => 'Este código ya está registrado.',
-            'proFoto.image'           => 'El archivo debe ser una imagen válida.',
-            'proFoto.max'             => 'La imagen no debe superar los 2 MB.',
             'empresaIdModal.required' => 'Debes seleccionar una empresa.',
         ];
     }
@@ -816,18 +812,6 @@ class GestionProductos extends Component
 
         DB::beginTransaction();
         try {
-            // Procesar imagen
-            $fotoPath = $this->fotoActual;
-            if ($this->proFoto) {
-                $general  = new General();
-                $fotoPath = $general->convertir_webp($this->proFoto, 'productos/');
-                if (!$fotoPath) {
-                    DB::rollBack();
-                    session()->flash('error', 'No se pudo procesar la imagen.');
-                    return;
-                }
-            }
-
             $this->recalcularCostoTotal();
 
             $datosBase = [
@@ -838,9 +822,9 @@ class GestionProductos extends Component
                 'pro_nombre'          => $this->proNombre,
                 'pro_codigo'          => $this->proCodigo,
                 'pro_codigo_interno'  => $this->proCodigoInterno,
-                'pro_descripcion'     => $this->proDescripcion ?: null,
+                'pro_descripcion'     => null,
                 'pro_marca'           => $this->proMarca ?: null,
-                'pro_foto'            => $fotoPath,
+                'pro_foto'            => null,
                 'impuesto_bolsa'      => $this->impuestoBolsa ? 1 : 0,
                 'pro_costo_base'      => (float) str_replace(',', '.', $this->proCostoBase),
                 'pro_flete'           => (float) str_replace(',', '.', $this->proFlete),

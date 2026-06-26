@@ -354,6 +354,14 @@
                                    class="btn btn-sm btn-info me-1" title="Ver detalle">
                                     <i class="fa-solid fa-eye"></i>
                                 </a>
+                                @can('historial_compras.exportar')
+                                <a href="{{ route('logistica.ingreso_compra_pdf') }}?ordenCompra={{ $orden->id_orden_compra }}"
+                                   target="_blank"
+                                   class="btn btn-sm btn-outline-danger me-1"
+                                   title="Ver PDF del ingreso">
+                                    <i class="fa-solid fa-file-pdf"></i>
+                                </a>
+                                @endcan
                                 @can('historial_compras.cambiar_estado')
                                 @if($orden->orden_compra_estado === 'pendiente')
                                 <button class="btn btn-sm btn-warning me-1"

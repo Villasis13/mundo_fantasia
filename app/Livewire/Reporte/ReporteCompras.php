@@ -229,7 +229,11 @@ class ReporteCompras extends Component
             ->groupBy('p.id_proveedores', 'p.proveedores_nombre', 'p.proveedores_numero_documento');
 
         $this->applyBaseFilters($query);
-        return $query->orderBy('p.proveedores_nombre');
+
+        // Ranking de compras: ordenar por gran total descendente
+        return $this->tipoReporte === 'ranking'
+            ? $query->orderByDesc('gran_total')
+            : $query->orderBy('p.proveedores_nombre');
     }
 
     public function render()
@@ -254,11 +258,11 @@ class ReporteCompras extends Component
                     'total_costo' => $all->sum('detalle_compra_total_pedido'),
                     'total_flete' => $all->sum('detalle_flete'),
                 ];
-            } elseif ($this->tipoReporte === 'resumen') {
+            } elseif ($this->tipoReporte === 'resumen' || $this->tipoReporte === 'ranking') {
                 $ordenes = $this->buildQueryResumen()->paginate($this->porPagina);
                 $all     = $this->buildQueryResumen()->get();
                 $totales = [
-                    'tipo'       => 'resumen',
+                    'tipo'       => $this->tipoReporte,
                     'cantidad'   => $all->count(),
                     'ordenes'    => $all->sum('total_ordenes'),
                     'mercaderia' => $all->sum('total_mercaderia'),

@@ -42,6 +42,7 @@
                         <option value="compras">Compras</option>
                         <option value="detallado">Compras Detallado</option>
                         <option value="resumen">Resumen Compras</option>
+                        <option value="ranking">Ranking de Compras</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -163,6 +164,7 @@
                 <i class="fa fa-list me-1"></i>
                 @if($totales['tipo'] === 'detallado') Detalle de productos por orden
                 @elseif($totales['tipo'] === 'resumen') Resumen por proveedor
+                @elseif($totales['tipo'] === 'ranking') Ranking de compras (mayor a menor)
                 @else Órdenes de compra
                 @endif
             </span>
@@ -298,7 +300,8 @@
                 <table class="table table-sm table-hover mb-0 align-middle">
                     <thead class="table-light">
                         <tr>
-                            <th class="ps-3">Proveedor</th>
+                            @if($totales['tipo'] === 'ranking')<th class="ps-3 text-center" style="width:48px">#</th>@endif
+                            <th class="{{ $totales['tipo'] === 'ranking' ? '' : 'ps-3' }}">Proveedor</th>
                             <th>RUC / Doc.</th>
                             <th class="text-center">N° Órdenes</th>
                             <th class="text-end">Mercadería</th>
@@ -310,7 +313,12 @@
                     <tbody>
                         @forelse($ordenes as $oc)
                         <tr>
-                            <td class="ps-3">
+                            @if($totales['tipo'] === 'ranking')
+                            <td class="ps-3 text-center fw-bold {{ $loop->iteration + ($ordenes->firstItem() - 1) <= 3 ? 'text-success' : 'text-muted' }}">
+                                {{ $loop->iteration + ($ordenes->firstItem() - 1) }}
+                            </td>
+                            @endif
+                            <td class="{{ $totales['tipo'] === 'ranking' ? '' : 'ps-3' }}">
                                 <div class="fw-semibold small">{{ $oc->proveedores_nombre }}</div>
                             </td>
                             <td class="small text-muted">{{ $oc->proveedores_numero_documento }}</td>
@@ -321,13 +329,13 @@
                             <td class="text-end pe-3 small fw-semibold text-success">S/ {{ number_format($oc->gran_total, 2) }}</td>
                         </tr>
                         @empty
-                        <tr><td colspan="7" class="text-center py-4 text-muted"><i class="fa fa-inbox fa-2x d-block mb-2 opacity-50"></i>No se encontraron proveedores.</td></tr>
+                        <tr><td colspan="{{ $totales['tipo'] === 'ranking' ? 8 : 7 }}" class="text-center py-4 text-muted"><i class="fa fa-inbox fa-2x d-block mb-2 opacity-50"></i>No se encontraron proveedores.</td></tr>
                         @endforelse
                     </tbody>
                     @if($ordenes->count() > 0)
                     <tfoot class="table-light fw-bold">
                         <tr>
-                            <td colspan="3" class="ps-3">TOTAL</td>
+                            <td colspan="{{ $totales['tipo'] === 'ranking' ? 4 : 3 }}" class="ps-3">TOTAL</td>
                             <td class="text-end text-primary">S/ {{ number_format($totales['mercaderia'], 2) }}</td>
                             <td class="text-end text-warning">S/ {{ number_format($totales['flete'], 2) }}</td>
                             <td class="text-end text-info">S/ {{ number_format($totales['gastos'], 2) }}</td>

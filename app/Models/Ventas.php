@@ -69,10 +69,13 @@ class Ventas extends Model
             $idSucursal = DB::table('ventas')->select('id_sucursal')->where('id_venta', $id_venta)->value('id_sucursal');
 
             $query = DB::table('ventas_detalle as vd')
-                ->join('productos as p', 'vd.id_pro', '=', 'p.id_pro')
+                ->leftJoin('productos as p', 'vd.id_pro', '=', 'p.id_pro')
                 ->leftJoin('medida as m', 'm.id_medida', '=', 'p.id_medida')
                 ->where('vd.id_venta', $id_venta)
-                ->where('p.pro_estado', 1);
+                // Conservar las líneas de servicio (sin id_pro) además de los productos activos
+                ->where(function ($q) {
+                    $q->where('p.pro_estado', 1)->orWhereNull('vd.id_pro');
+                });
 
             if ($idSucursal) {
                 $query->leftJoin('producto_sucursal as ps', function ($join) use ($idSucursal) {
@@ -81,7 +84,7 @@ class Ventas extends Model
                     ->leftJoin('tipo_afectacion as ta', 'ta.id_tipo_afectacion', '=', 'ps.id_tipo_afectacion')
                     ->select('vd.*', 'p.*', 'ta.*', 'ps.id_tipo_afectacion', 'm.medida_nombre', 'm.medida_codigo_unidad');
             } else {
-                $query->join('tipo_afectacion as ta', 'ta.id_tipo_afectacion', '=', 'p.id_tipo_afectacion')
+                $query->leftJoin('tipo_afectacion as ta', 'ta.id_tipo_afectacion', '=', 'p.id_tipo_afectacion')
                     ->select('vd.*', 'p.*', 'ta.*', 'm.medida_nombre', 'm.medida_codigo_unidad');
             }
 

@@ -183,48 +183,6 @@
                                 </div>
                             </div>
 
-                            <div class="col-12">
-                                <label class="form-label fw-semibold small text-secondary mb-1">Descripción</label>
-                                <textarea class="form-control @error('proDescripcion') is-invalid @enderror"
-                                          wire:model="proDescripcion"
-                                          rows="2"
-                                          placeholder="Descripción opcional..."></textarea>
-                                @error('proDescripcion')
-                                    <div class="invalid-feedback">{{ $message }}</div>
-                                @enderror
-                            </div>
-
-                            <div class="col-12">
-                                <label class="form-label fw-semibold small text-secondary mb-1">
-                                    Imagen
-                                </label>
-                                <div class="d-flex align-items-center gap-3">
-                                    <div>
-                                        @if($proFoto && !$errors->has('proFoto'))
-                                            <img src="{{ $proFoto->temporaryUrl() }}" alt="preview"
-                                                 style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:2px solid #198754;">
-                                        @elseif($fotoActual && file_exists(public_path($fotoActual)))
-                                            <img src="{{ asset($fotoActual) }}" alt="actual"
-                                                 style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:2px solid #dee2e6;">
-                                        @else
-                                            <img src="{{ asset('sin-fotografia.png') }}" alt="sin foto"
-                                                 style="width:56px;height:56px;object-fit:cover;border-radius:8px;opacity:.35;">
-                                        @endif
-                                        <span wire:loading wire:target="proFoto"
-                                              class="spinner-border spinner-border-sm text-primary ms-1"></span>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <input type="file"
-                                               class="form-control form-control-sm @error('proFoto') is-invalid @enderror"
-                                               wire:model="proFoto"
-                                               accept="image/*">
-                                        @error('proFoto')
-                                            <div class="invalid-feedback">{{ $message }}</div>
-                                        @enderror
-                                    </div>
-                                </div>
-                            </div>
-
                             {{-- ── Código Interno ──────────────────── --}}
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">
