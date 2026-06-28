@@ -1870,6 +1870,306 @@ class GestionventasController extends Controller
         exit;
     }
 
+    public function imprimir_ticketera_escpos_old()
+    {
+        $id_venta = (int) request('venta_id', 0);
+        if (!$id_venta) {
+            return response()->json(['ok' => false, 'error' => 'ID de venta inválido']);
+        }
+
+        try {
+            $dato_venta     = $this->venta->listar_venta_x_id_pdf($id_venta);
+            $detalle_venta  = $this->venta->listar_venta_detalle_x_id_venta_pdf($id_venta);
+            $formas_de_pago = Ventas_detalle_pago::listar_formas_x_idventa($id_venta);
+
+            if (!$dato_venta) {
+                return response()->json(['ok' => false, 'error' => 'Venta no encontrada']);
+            }
+
+            $formas_de_pago_mensaje = '';
+            foreach ($formas_de_pago as $for) {
+                $formas_de_pago_mensaje .= $for->tipo_pago_nombre . ' ';
+            }
+            $formas_de_pago_mensaje = trim($formas_de_pago_mensaje);
+
+            $fecha_obj        = \DateTime::createFromFormat('Y-m-d H:i:s', $dato_venta->venta_fecha);
+            $fecha_formateada = $fecha_obj->format('d/m/Y');
+            $hora_formateada  = $fecha_obj->format('H:i:s');
+
+            // QR content (same formula used in generar_qr)
+            $contenido_qr = $dato_venta->empresa_ruc . '|' . $dato_venta->venta_tipo . '|'
+                . $dato_venta->venta_serie . '|' . $dato_venta->venta_correlativo
+                . '|' . $dato_venta->venta_totaligv . '|' . $dato_venta->venta_total
+                . '|' . date('Y-m-d', strtotime($dato_venta->venta_fecha))
+                . '|' . $dato_venta->tipodocumento_codigo . '|' . $dato_venta->cliente_numero;
+
+            if ($dato_venta->venta_tipo == '03') {
+                $tipo_comprobante  = 'BOLETA DE VENTA ELECTRONICA';
+                $serie_correlativo = $dato_venta->venta_serie . '-' . str_pad($dato_venta->venta_correlativo, 8, '0', STR_PAD_LEFT);
+                $dnni = 'DNI'; $documento = $dato_venta->cliente_numero;
+            } elseif ($dato_venta->venta_tipo == '01') {
+                $tipo_comprobante  = 'FACTURA ELECTRONICA';
+                $serie_correlativo = $dato_venta->venta_serie . '-' . str_pad($dato_venta->venta_correlativo, 8, '0', STR_PAD_LEFT);
+                $dnni = 'RUC'; $documento = $dato_venta->cliente_numero;
+            } elseif ($dato_venta->venta_tipo == '07') {
+                $tipo_comprobante  = 'NOTA DE CREDITO ELECTRONICA';
+                $serie_correlativo = $dato_venta->venta_serie . '-' . str_pad($dato_venta->venta_correlativo, 8, '0', STR_PAD_LEFT);
+                $dnni = 'DOCUMENTO'; $documento = $dato_venta->cliente_numero;
+            } elseif ($dato_venta->venta_tipo == '08') {
+                $tipo_comprobante  = 'NOTA DE DEBITO ELECTRONICA';
+                $serie_correlativo = $dato_venta->venta_serie . '-' . str_pad($dato_venta->venta_correlativo, 8, '0', STR_PAD_LEFT);
+                $dnni = 'DOCUMENTO'; $documento = $dato_venta->cliente_numero;
+            } else {
+                $tipo_comprobante  = 'NOTA DE VENTA';
+                $serie_correlativo = $dato_venta->venta_serie . '-' . str_pad($dato_venta->venta_correlativo, 8, '0', STR_PAD_LEFT);
+                $dnni = 'DOCUMENTO'; $documento = $dato_venta->cliente_numero;
+            }
+
+            $da = new NumeroALetras();
+            $esGratuita = ((float)$dato_venta->venta_total == 0 && (float)$dato_venta->venta_totalgratuita > 0);
+            $importe_letra = $esGratuita
+                ? 'TRANSFERENCIA GRATUITA - Valor ref.: ' . $da->toInvoice((float)$dato_venta->venta_totalgratuita, '2', 'soles')
+                : $da->toInvoice((float)$dato_venta->venta_total, '2', 'soles');
+
+            $condicion_pago = $dato_venta->id_formas_pago == 1 ? 'CONTADO' : 'CREDITO';
+
+            $idTiendaCaja = DB::table('caja_numero')
+                ->where('id_caja_numero', $dato_venta->id_caja_numero)
+                ->value('id_tienda');
+            $sedesQuery = DB::table('tiendas')
+                ->where('id_empresa', $dato_venta->id_empresa)
+                ->where('tienda_estado', '!=', 0)
+                ->whereIn('tienda_tipo', [1, 2]);
+            if ($idTiendaCaja) {
+                $sedesQuery->where('id_tienda', '!=', $idTiendaCaja);
+            }
+            $sedes = $sedesQuery->orderBy('tienda_tipo')->orderBy('id_tienda')->get();
+
+            $subTotal = (float)$dato_venta->venta_totalgravada
+                      + (float)$dato_venta->venta_totalexonerada
+                      + (float)$dato_venta->venta_totalinafecta;
+
+            $sim = $dato_venta->simbolo;
+            $tieneDesc  = !empty(trim((string)$dato_venta->empresa_descripcion));
+            $tieneTel   = !empty($dato_venta->empresa_telefono1) || !empty($dato_venta->empresa_telefono2);
+            $tieneEmail = !empty($dato_venta->empresa_correo);
+
+            // ── Helpers ──────────────────────────────────────────────
+            $COL = 48;
+            $SEP_THIN  = str_repeat('-', $COL) . "\n";
+            $SEP_THICK = str_repeat('=', $COL) . "\n";
+
+            // Right-aligned label + value on a single line
+            $rLine = function (string $label, string $value) use ($COL): string {
+                $total = strlen($label) + strlen($value);
+                if ($total >= $COL) return $label . $value . "\n";
+                return str_pad($label, $COL - strlen($value)) . $value . "\n";
+            };
+
+            // ── Inicializar impresora ─────────────────────────────────
+            $tmpEscpos = tempnam(sys_get_temp_dir(), 'ticket_');
+            $connector = new FilePrintConnector($tmpEscpos);
+            $printer   = new Printer($connector);
+            $printer->initialize();
+
+            // ══ CABECERA EMPRESA ══════════════════════════════════════
+            $printer->setJustification(Printer::JUSTIFY_CENTER);
+            $printer->selectPrintMode(Printer::MODE_EMPHASIZED);
+            $printer->setTextSize(1, 2);
+            $printer->text($dato_venta->empresa_razon_social . "\n");
+            $printer->setTextSize(1, 1);
+            $printer->selectPrintMode();
+
+            if ($tieneDesc) {
+                $desc = str_replace('\n', "\n", (string)$dato_venta->empresa_descripcion);
+                $printer->text($desc . "\n");
+            }
+
+            $printer->text($dato_venta->empresa_domiciliofiscal . "\n");
+            $printer->text($dato_venta->ubigeo_departamento . '-' . $dato_venta->ubigeo_provincia . '-' . $dato_venta->ubigeo_distrito . "\n");
+
+            if ($tieneTel) {
+                if (!empty($dato_venta->empresa_telefono1) && !empty($dato_venta->empresa_telefono2)) {
+                    $telLinea = 'Cel. ' . $dato_venta->empresa_telefono1 . '  Telef: ' . $dato_venta->empresa_telefono2;
+                } elseif (!empty($dato_venta->empresa_telefono1)) {
+                    $telLinea = 'Cel. ' . $dato_venta->empresa_telefono1;
+                } else {
+                    $telLinea = 'Telef: ' . $dato_venta->empresa_telefono2;
+                }
+                $printer->text($telLinea . "\n");
+            }
+
+            if ($tieneEmail) {
+                $printer->text('Email: ' . $dato_venta->empresa_correo . "\n");
+            }
+
+            foreach ($sedes as $sede) {
+                $sedeTexto = $sede->tienda_nombre;
+                if (!empty($sede->tienda_direccion)) {
+                    $sedeTexto .= ' - ' . $sede->tienda_direccion;
+                }
+                $printer->text($sedeTexto . "\n");
+            }
+
+            $printer->text($SEP_THIN);
+            $printer->selectPrintMode(Printer::MODE_EMPHASIZED);
+            $printer->text('RUC N° ' . $dato_venta->empresa_ruc . "\n");
+            $printer->selectPrintMode();
+            $printer->text($SEP_THICK);
+
+            // ══ TIPO COMPROBANTE ══════════════════════════════════════
+            $printer->selectPrintMode(Printer::MODE_EMPHASIZED);
+            $printer->setTextSize(1, 2);
+            $printer->text($tipo_comprobante . "\n");
+            $printer->setTextSize(1, 1);
+            $printer->selectPrintMode();
+            $printer->text($serie_correlativo . "\n");
+
+            if ($esGratuita) {
+                $printer->text('*** TRANSFERENCIA A TITULO GRATUITO ***' . "\n");
+            }
+
+            $printer->text($SEP_THIN);
+
+            // ══ FECHA / HORA ══════════════════════════════════════════
+            $printer->setJustification(Printer::JUSTIFY_LEFT);
+            $printer->text(str_pad($fecha_formateada, $COL - strlen($hora_formateada)) . $hora_formateada . "\n");
+
+            // ══ DATOS DEL CLIENTE ═════════════════════════════════════
+            $clienteNombre = ($dato_venta->id_tipo_documento != 4)
+                ? $dato_venta->cliente_nombre
+                : $dato_venta->cliente_razonsocial;
+
+            if (!empty(trim((string)$clienteNombre))) {
+                $printer->text('Nomb: ' . $clienteNombre . "\n");
+            }
+            if (!empty($dato_venta->cliente_direccion)) {
+                $printer->text('Direc: ' . $dato_venta->cliente_direccion . "\n");
+            }
+            if (!empty($documento)) {
+                $printer->text($dnni . ': ' . $documento . "\n");
+            }
+
+            $printer->setJustification(Printer::JUSTIFY_RIGHT);
+            $printer->text('Condicion de Pago: ' . $condicion_pago . "\n");
+            $printer->text('Forma de Pago: ' . $formas_de_pago_mensaje . "\n");
+
+            // ══ DETALLE DE PRODUCTOS ══════════════════════════════════
+            $printer->text($SEP_THICK);
+            $printer->setJustification(Printer::JUSTIFY_LEFT);
+            $printer->selectPrintMode(Printer::MODE_EMPHASIZED);
+            $printer->text(
+                str_pad('Detalle', 26)
+                . str_pad('Cant/UM', 10, ' ', STR_PAD_LEFT)
+                . str_pad('Precio', 6, ' ', STR_PAD_LEFT)
+                . str_pad('Total', 6, ' ', STR_PAD_LEFT) . "\n"
+            );
+            $printer->selectPrintMode();
+            $printer->text($SEP_THIN);
+
+            foreach ($detalle_venta as $f) {
+                // Fila 1: código + nombre
+                $descripcion = '';
+                if (!empty($f->pro_codigo)) {
+                    $descripcion = $f->pro_codigo . ' ';
+                }
+                $descripcion .= $f->venta_detalle_nombre_producto;
+                $printer->text(wordwrap($descripcion, $COL, "\n", true) . "\n");
+
+                // Fila 2: cantidad | unidad x factor | precio | total
+                $numCantidad = number_format((float)$f->venta_detalle_cantidad, 0, '.', '');
+                $unidad      = !empty($f->pres_nombre)
+                    ? $f->pres_nombre
+                    : (!empty($f->medida_codigo_unidad) ? $f->medida_codigo_unidad : 'Und');
+                $factor      = (float)($f->pres_factor ?? 1.0);
+                $factorText  = $factor > 1 ? number_format($factor, 0) : $numCantidad;
+                $cantTexto   = $unidad . ' x ' . $factorText;
+                $precioUnit  = number_format(round((float)$f->venta_detalle_precio_unitario, 2), 2, '.', '');
+                $totalItem   = number_format(round((float)$f->venta_detalle_importe_total,   2), 2, '.', '');
+
+                $printer->text(
+                    str_pad($numCantidad, 5, ' ', STR_PAD_LEFT)
+                    . ' '
+                    . str_pad($cantTexto, 20)
+                    . str_pad($precioUnit, 11, ' ', STR_PAD_LEFT)
+                    . str_pad($totalItem, 11, ' ', STR_PAD_LEFT) . "\n"
+                );
+            }
+
+            $printer->text($SEP_THIN);
+
+            // ══ SUBTOTALES ════════════════════════════════════════════
+            if ((float)$dato_venta->venta_totalgratuita > 0) {
+                $printer->text($rLine('Op.Grat:', "$sim " . number_format((float)$dato_venta->venta_totalgratuita, 2)));
+            }
+            $printer->text($rLine('SubTotal:', "$sim " . number_format($subTotal, 2)));
+            $printer->text($rLine('I.G.V.:', "$sim " . number_format((float)$dato_venta->venta_totaligv, 2)));
+            $printer->text($rLine('ICBPER:', "$sim " . number_format((float)$dato_venta->venta_icbper, 2)));
+            $printer->text($rLine('Cp Exon:', "$sim " . number_format((float)$dato_venta->venta_totalexonerada, 2)));
+
+            $printer->text($SEP_THICK);
+            $printer->selectPrintMode(Printer::MODE_EMPHASIZED);
+            $printer->text($rLine('Imp.Total:', "$sim " . number_format((float)$dato_venta->venta_total, 2)));
+            $printer->selectPrintMode();
+            $printer->text($SEP_THICK);
+
+            // ══ IMPORTE EN LETRAS ═════════════════════════════════════
+            $printer->text(wordwrap('Son: ' . $importe_letra, $COL, "\n", true) . "\n");
+
+            // ══ DESGLOSE DE PAGOS ═════════════════════════════════════
+            if ($dato_venta->id_formas_pago == 1 && !$esGratuita) {
+                foreach ($formas_de_pago as $for) {
+                    $printer->text($rLine($for->tipo_pago_nombre . ':', "$sim " . number_format((float)$for->venta_detalle_pago_monto, 2)));
+                }
+                $printer->text($rLine('Vuelto:', "$sim " . number_format((float)$dato_venta->venta_vuelto, 2)));
+            }
+
+            // ══ QR ════════════════════════════════════════════════════
+            if ($dato_venta->venta_tipo != '20') {
+                $printer->setJustification(Printer::JUSTIFY_CENTER);
+                $printer->qrCode($contenido_qr, Printer::QR_ECLEVEL_M, 5);
+            }
+
+            // ══ PTO VENTA / VENDEDOR ══════════════════════════════════
+            $printer->setJustification(Printer::JUSTIFY_CENTER);
+            $ptoVenta = !empty($dato_venta->tienda_nombre) ? $dato_venta->tienda_nombre : '-';
+            $printer->text('Pto.Venta: ' . $ptoVenta . "\n");
+            $printer->text('Vendedor: ' . $dato_venta->nombre_users . "\n");
+
+            // ══ PIE ═══════════════════════════════════════════════════
+            $printer->text($SEP_THIN);
+            $printer->text('BIENES TRANSFERIDOS EN LA AMAZONIA PARA SER CONSUMIDOS EN LA MISMA' . "\n");
+            $printer->text('** Una vez salida la mercaderia, no se aceptan cambios ni devoluciones **' . "\n");
+            $printer->text('** Gracias por su Compra **' . "\n");
+
+            if ($dato_venta->venta_tipo != '20') {
+                if (!empty($dato_venta->venta_codigo_hash)) {
+                    $printer->text('CODIGO HASH: ' . $dato_venta->venta_codigo_hash . "\n");
+                }
+                $printer->text('Consulte validez en: http://e.consulta.sunat.gob.pe/ol-ti-itconsvalcpe/ConsVCpe.htm' . "\n");
+                $printer->text('Representacion impresa de comprobante de pago electronico' . "\n");
+            }
+
+            $printer->feed(3);
+            $printer->cut();
+            $printer->close();
+            $fileSize='';
+            $cmd='';
+            // Enviar al spooler de Windows vía shell (más robusto desde servicio Apache)
+            exec('copy /b ' . escapeshellarg($tmpEscpos) . ' "\\\\localhost\\ticket" 2>&1', $out, $code);
+            @unlink($tmpEscpos);
+
+            if ($code !== 0) {
+                throw new \Exception('No se pudo enviar a la impresora. Asegúrese de que "ticket" esté compartida. ' . implode(' ', $out));
+            }
+
+            return response()->json(['ok' => true, '_debug' => ['fileSize' => $fileSize, 'execOut' => $out, 'execCode' => $code, 'cmd' => $cmd]]);
+
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            return response()->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
     public function imprimir_ticketera_escpos()
     {
         $id_venta = (int) request('venta_id', 0);
@@ -1970,6 +2270,7 @@ class GestionventasController extends Controller
             $tmpEscpos = tempnam(sys_get_temp_dir(), 'ticket_');
             $connector = new FilePrintConnector($tmpEscpos);
             $printer   = new Printer($connector);
+            $printer->initialize();
 
             // ══ CABECERA EMPRESA ══════════════════════════════════════
             $printer->setJustification(Printer::JUSTIFY_CENTER);
@@ -2153,12 +2454,32 @@ class GestionventasController extends Controller
             $printer->cut();
             $printer->close();
 
-            // Enviar al spooler de Windows vía shell (más robusto desde servicio Apache)
-            exec('copy /b ' . escapeshellarg($tmpEscpos) . ' "\\\\localhost\\Ticketera" 2>&1', $out, $code);
+            // ── Leer el archivo ESC/POS generado ─────────────────────
+            $escposData = file_get_contents($tmpEscpos);
             @unlink($tmpEscpos);
 
-            if ($code !== 0) {
-                throw new \Exception('No se pudo enviar a la impresora. Asegúrese de que "Ticketera" esté compartida. ' . implode(' ', $out));
+            if ($escposData === false || strlen($escposData) === 0) {
+                throw new \Exception('No se pudo leer el archivo ESC/POS temporal.');
+            }
+
+            // ── Enviar al agente de impresión en la PC del usuario ────
+            $ip_cliente = request()->ip();  // IP de tu PC: 192.168.8.234
+
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->post(
+                "http://{$ip_cliente}:8091/imprimir_raw",
+                [
+                    'token'        => 'mundofantasia2026',
+                    'escpos_base64' => base64_encode($escposData),
+                ]
+            );
+
+            if (!$response->successful()) {
+                throw new \Exception('El agente de impresión no respondió. ¿Está abierto el iniciar_agente.bat en tu PC?');
+            }
+
+            $result = $response->json();
+            if (!($result['ok'] ?? false)) {
+                throw new \Exception('Error en el agente: ' . ($result['mensaje'] ?? 'desconocido'));
             }
 
             return response()->json(['ok' => true]);

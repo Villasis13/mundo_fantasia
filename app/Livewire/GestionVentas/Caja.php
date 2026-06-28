@@ -1050,6 +1050,11 @@ class Caja extends Component
 
     public function updatedBuscarModal(): void { }
 
+    public function cambiarTab(string $tab): void
+    {
+        $this->tabModal = $tab;
+    }
+
     public function updatedTabModal(): void
     {
         if ($this->tabModal === 'cierre_caja') {

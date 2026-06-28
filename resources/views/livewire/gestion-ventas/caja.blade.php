@@ -173,27 +173,29 @@
 
                         {{-- Grupo principal: Pedidos / Proformas --}}
                         <div class="d-flex align-items-center rounded-3 p-1" style="background:#e2e5ea;gap:3px;">
-                            <button type="button" wire:click="$set('tabModal','pedidos')"
+                            <button type="button" wire:click="cambiarTab('pedidos')"
+                                    wire:loading.attr="disabled" wire:target="cambiarTab"
                                     class="btn btn-sm d-flex align-items-center gap-1 fw-semibold"
                                     style="font-size:12.5px;border-radius:6px;padding:5px 13px;border:none;transition:all .15s;
                                            {{ $tabModal === 'pedidos'
                                                ? 'background:#fff;color:#0d6efd;box-shadow:0 1px 4px rgba(0,0,0,.15);'
                                                : 'background:transparent;color:#6c757d;' }}">
                                 <i class="fa-solid fa-clipboard-list" style="font-size:11px;"></i>
-                                Pedidos
+                                PEDIDOS
                                 <span class="ms-1 rounded px-1" style="font-size:10px;font-family:monospace;
-                                      {{ $tabModal === 'pedidos' ? 'background:#e7f0ff;color:#0d6efd;' : 'background:#d1d5db;color:#6c757d;' }}">F1</span>
+                                      {{ $tabModal === 'pedidos' ? 'background:#e7f0ff;color:#0d6efd;' : 'background:#d1d5db;color:#6c757d;' }}">F3</span>
                             </button>
-                            <button type="button" wire:click="$set('tabModal','proformas')"
+                            <button type="button" wire:click="cambiarTab('proformas')"
+                                    wire:loading.attr="disabled" wire:target="cambiarTab"
                                     class="btn btn-sm d-flex align-items-center gap-1 fw-semibold"
                                     style="font-size:12.5px;border-radius:6px;padding:5px 13px;border:none;transition:all .15s;
                                            {{ $tabModal === 'proformas'
                                                ? 'background:#fff;color:#0d6efd;box-shadow:0 1px 4px rgba(0,0,0,.15);'
                                                : 'background:transparent;color:#6c757d;' }}">
                                 <i class="fa-solid fa-file-contract" style="font-size:11px;"></i>
-                                Proformas
+                                PROFORMAS
                                 <span class="ms-1 rounded px-1" style="font-size:10px;font-family:monospace;
-                                      {{ $tabModal === 'proformas' ? 'background:#e7f0ff;color:#0d6efd;' : 'background:#d1d5db;color:#6c757d;' }}">F2</span>
+                                      {{ $tabModal === 'proformas' ? 'background:#e7f0ff;color:#0d6efd;' : 'background:#d1d5db;color:#6c757d;' }}">F7</span>
                             </button>
                         </div>
 
@@ -201,37 +203,47 @@
                         {{-- Divisor --}}
                         <div style="width:1px;height:28px;background:#ced4da;flex-shrink:0;"></div>
 
-                        {{-- Resumen de Ventas --}}
-                        <button type="button" wire:click="$set('tabModal','resumen_ventas')"
+                        {{-- Registro de Ventas --}}
+                        <button type="button" wire:click="cambiarTab('resumen_ventas')"
+                                wire:loading.attr="disabled" wire:target="cambiarTab"
                                 class="btn btn-sm d-flex align-items-center gap-1 fw-semibold"
                                 style="font-size:12.5px;border-radius:6px;padding:5px 13px;border:none;transition:all .15s;
                                        {{ $tabModal === 'resumen_ventas'
                                            ? 'background:#0C447C;color:#fff;box-shadow:0 1px 4px rgba(12,68,124,.35);'
                                            : 'background:#dce8f5;color:#0C447C;' }}">
                             <i class="fa-solid fa-chart-bar" style="font-size:11px;"></i>
-                            Resumen
-                            <span class="ms-1 rounded px-1" style="font-size:10px;font-family:monospace;
-                                  {{ $tabModal === 'resumen_ventas' ? 'background:rgba(255,255,255,.25);color:#fff;' : 'background:#b8d4f0;color:#0C447C;' }}">F3</span>
+                            REGISTRO DE VENTAS
                         </button>
 
                         {{-- Cierre de Caja --}}
-                        <button type="button" wire:click="$set('tabModal','cierre_caja')"
+                        <button type="button" wire:click="cambiarTab('cierre_caja')"
+                                wire:loading.attr="disabled" wire:target="cambiarTab"
                                 class="btn btn-sm d-flex align-items-center gap-1 fw-semibold"
                                 style="font-size:12.5px;border-radius:6px;padding:5px 13px;border:none;transition:all .15s;
                                        {{ $tabModal === 'cierre_caja'
                                            ? 'background:#dc3545;color:#fff;box-shadow:0 1px 4px rgba(220,53,69,.35);'
                                            : 'background:#fde8ea;color:#dc3545;' }}">
                             <i class="fa-solid fa-door-closed" style="font-size:11px;"></i>
-                            Cierre de Caja
-                            <span class="ms-1 rounded px-1" style="font-size:10px;font-family:monospace;
-                                  {{ $tabModal === 'cierre_caja' ? 'background:rgba(255,255,255,.25);color:#fff;' : 'background:#f9c0c5;color:#dc3545;' }}">F4</span>
+                            CIERRE DE CAJA
                         </button>
                         @endif
 
                     </div>
                 </div>
 
-                <div class="modal-body p-0" style="max-height:480px;overflow-y:auto;">
+                <div class="modal-body p-0" style="max-height:480px;overflow-y:auto;position:relative;">
+
+                    {{-- Loading overlay al cambiar tab --}}
+                    <div class="d-none align-items-center justify-content-center"
+                         wire:loading.class.remove="d-none"
+                         wire:loading.class="d-flex"
+                         wire:target="cambiarTab"
+                         style="position:absolute;inset:0;background:rgba(255,255,255,.75);z-index:20;backdrop-filter:blur(1px);">
+                        <div class="d-flex align-items-center gap-2" style="color:#185FA5;">
+                            <div class="spinner-border spinner-border-sm" role="status" style="width:18px;height:18px;border-width:2px;"></div>
+                            <span style="font-size:13px;font-weight:600;">Cargando...</span>
+                        </div>
+                    </div>
 
                     {{-- Apertura caja (cuando cerrada) --}}
                     @if(!$validarCaja)
@@ -1410,7 +1422,7 @@
     });
 
     $wire.on('abrirComprobanteCaja', ({ idVenta }) => {
-        /*fetch('{{ route('Gestionventas.imprimir_ticketera_escpos') }}?venta_id=' + idVenta)
+        fetch('{{ route('Gestionventas.imprimir_ticketera_escpos') }}?venta_id=' + idVenta)
             .then(r => r.json())
             .then(data => {
                 if (!data.ok) {
@@ -1420,8 +1432,8 @@
             .catch(err => {
                 alert('No se pudo conectar con la impresora. Verifique que la impresora "Ticketera" esté disponible.');
                 console.error('ESC/POS error:', err);
-            });*/
-        window.open('{{ route('Gestionventas.imprimir_ticketera_venta') }}?venta_id=' + idVenta, '_blank');
+            });
+        {{--window.open('{{ route('Gestionventas.imprimir_ticketera_venta') }}?venta_id=' + idVenta, '_blank');--}}
     });
 
     // Auto-foco en Contado al entrar a cobrar
@@ -1436,26 +1448,16 @@
     document.addEventListener('keydown', (e) => {
         const modalAbierto = document.getElementById('modalSeleccionarPedido').classList.contains('show');
 
-        // F1/F2/F3/F4 dentro del modal: cambiar tabs
+        // F3/F7 dentro del modal: cambiar tabs
         if (modalAbierto) {
-            if (e.key === 'F1') {
-                e.preventDefault();
-                $wire.set('tabModal', 'pedidos').then(() => enfocarPrimerCobrar());
-                return;
-            }
-            if (e.key === 'F2') {
-                e.preventDefault();
-                $wire.set('tabModal', 'proformas').then(() => enfocarPrimerCobrar());
-                return;
-            }
             if (e.key === 'F3') {
                 e.preventDefault();
-                $wire.set('tabModal', 'resumen_ventas');
+                $wire.call('cambiarTab', 'pedidos').then(() => enfocarPrimerCobrar());
                 return;
             }
-            if (e.key === 'F4') {
+            if (e.key === 'F7') {
                 e.preventDefault();
-                $wire.set('tabModal', 'cierre_caja');
+                $wire.call('cambiarTab', 'proformas').then(() => enfocarPrimerCobrar());
                 return;
             }
             return; // si el modal está abierto no procesar más atajos

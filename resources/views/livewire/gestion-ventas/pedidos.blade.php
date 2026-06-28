@@ -683,6 +683,7 @@
                                         </div>
                                         @endif {{-- fin tipo producto --}}
                                         <input type="number" step="0.01"
+                                               wire:key="precio-input-{{ $i }}-{{ $item['tipo_precio'] ?? 'publico' }}"
                                                min="{{ ($item['tipo'] ?? 'producto') === 'producto' && $esRestringido ? ($item['precio_mayorista'] ?? 0) : 0 }}"
                                                class="form-control form-control-sm @error('precio_item_'.$i) is-invalid @enderror"
                                                wire:model.live="items.{{ $i }}.precio">

@@ -114,7 +114,7 @@ class Pedidos extends Component
     private function precioMinimo(array $item): float
     {
         if ($this->esPrivilegiado()) return 0.0;
-        return (float) ($item['precio_publico'] ?? 0);
+        return (float) ($item['precio_mayorista'] ?? 0);
     }
 
     public function mount(): void
@@ -156,7 +156,7 @@ class Pedidos extends Component
             $this->items[$idx]['precio'] = $minimo;
             $this->addError(
                 "precio_item_{$idx}",
-                'Precio mínimo permitido: S/ ' . number_format($minimo, 2) . ' (precio de venta).'
+                'Precio mínimo permitido: S/ ' . number_format($minimo, 2) . ' (precio mayorista).'
             );
         } else {
             $this->resetErrorBag("precio_item_{$idx}");
