@@ -22,25 +22,31 @@ class Compras extends Component
     public string $vista = 'historial';
 
     // ── Cabecera de la orden ──────────────────────────────────
-    public int    $empresaIdCompra  = 0;
-    public int    $idProveedor      = 0;
-    public string $proveedorRuc     = '';
-    public string $condicionPago    = 'contado';
-    public int    $idTipoPago       = 0;
-    public string $tipoDoc              = '';
-    public string $numeroDoc            = '';
-    public string $fechaEmision         = '';
-    public string $fechaAlmacenamiento  = '';
-    public string $fechaVencimiento     = '';
-    public string $moneda               = 'PEN';
-    public string $guiaRemitente        = '';
-    public string $guiaTransportista    = '';
-    public array  $transportistas       = [['nombre' => '']];
-    public string $observacion          = '';
-    public        $docAdjunto           = null;
+    public int    $empresaIdCompra       = 0;
+    public int    $idProveedor           = 0;
+    public string $proveedorRuc          = '';
+    public string $proveedorRazonSocial  = '';
+    public string $condicionPago         = 'contado';
+    public int    $idTipoPago            = 0;
+    public string $tipoDoc               = 'FACTURA';
+    public string $docSerie              = '';
+    public string $docCorrelativo        = '';
+    public string $numeroDoc             = '';
+    public string $estadoOrden           = 'recibido';
+    public string $proximoNumero         = '';
+    public string $fechaEmision          = '';
+    public string $fechaAlmacenamiento   = '';
+    public string $fechaVencimiento      = '';
+    public string $moneda                = 'PEN';
+    public string $guiaRemitente         = '';
+    public string $guiaTransportista     = '';
+    public array  $transportistas        = [['nombre' => '']];
+    public string $observacion           = '';
+    public        $docAdjunto            = null;
     public string $flete                = '0';
     public string $gastosOp             = '0';
-    public string $descuentoPorcentaje  = '0';
+    public string $descuentoImporte         = '0';
+    public bool   $revertirDesagregarIgv   = false;
     public string $igvPorcentaje        = '0';
     public string $percepcionPorcentaje = '0';
 
@@ -59,6 +65,16 @@ class Compras extends Component
     public string $sunatTipo          = ''; // success | warning | error
     public bool   $modalSunat         = false;
     public array  $sunatFacturas      = [];
+
+    // ── Nuevo proveedor (modal rápido) ───────────────────────────
+    public string $npNombre          = '';
+    public int    $npTipoDoc         = 4; // RUC por defecto
+    public string $npNumDoc          = '';
+    public string $npDireccion       = '';
+    public string $npTelefono        = '';
+    public string $npCorreo          = '';
+    public string $npDocMensaje      = '';
+    public string $npDocMensajeTipo  = ''; // success | error
 
     // ── Anulación / transición de estado ─────────────────────────
     public ?int   $idAnular           = null;
@@ -107,9 +123,9 @@ class Compras extends Component
 
         $this->filtroDesde  = now()->startOfMonth()->format('Y-m-d');
         $this->filtroHasta  = now()->format('Y-m-d');
-        $this->fechaEmision = now()->format('Y-m-d');
 
-        $this->empresaIdCompra = 1;
+        $this->limpiarFormulario();
+        $this->vista = 'nueva';
     }
 
     private function esAdmin(): bool          { return $this->cachedRoleId === 2; }
@@ -138,11 +154,12 @@ class Compras extends Component
     public function updatedIdProveedor(): void
     {
         if ($this->idProveedor > 0) {
-            $this->proveedorRuc = (string) (DB::table('proveedores')
-                ->where('id_proveedores', $this->idProveedor)
-                ->value('proveedores_numero_documento') ?? '');
+            $prov = DB::table('proveedores')->where('id_proveedores', $this->idProveedor)->first();
+            $this->proveedorRuc         = (string) ($prov?->proveedores_numero_documento ?? '');
+            $this->proveedorRazonSocial = (string) ($prov?->proveedores_nombre ?? '');
         } else {
-            $this->proveedorRuc = '';
+            $this->proveedorRuc         = '';
+            $this->proveedorRazonSocial = '';
         }
     }
 
@@ -372,11 +389,13 @@ class Compras extends Component
 
         $flete           = max(0, (float) $this->flete);
         $gastos          = max(0, (float) $this->gastosOp);
-        $subtotal        = collect($this->items)->sum('total');
-        $descuentoPct    = max(0, min(100, (float) $this->descuentoPorcentaje));
-        $descuentoMonto  = round($subtotal * $descuentoPct / 100, 2);
-        $subtotalNeto    = round($subtotal - $descuentoMonto, 2);
         $igvPct          = max(0, (float) $this->igvPorcentaje);
+        $rawSubtotal     = round(collect($this->items)->sum('total'), 2);
+        $subtotal        = ($this->revertirDesagregarIgv && $igvPct > 0)
+            ? floor($rawSubtotal / (1 + $igvPct / 100) * 100) / 100
+            : $rawSubtotal;
+        $descuentoMonto  = round(max(0, (float) $this->descuentoImporte), 2);
+        $subtotalNeto    = round($subtotal - $descuentoMonto, 2);
         $igvMonto        = round($subtotalNeto * $igvPct / 100, 2);
         $percepcionPct   = max(0, (float) $this->percepcionPorcentaje);
         $percepcionMonto = round(($subtotalNeto + $igvMonto) * $percepcionPct / 100, 2);
@@ -415,11 +434,13 @@ class Compras extends Component
                 'orden_compra_titulo'            => 'Orden de Compra',
                 'orden_compra_numero'            => $numero,
                 'orden_compra_codigo'            => $numero,
-                'orden_compra_estado'            => 'en_transito',
+                'orden_compra_estado'            => $this->estadoOrden,
                 'orden_compra_activo'            => 1,
                 'orden_compra_fecha'             => now(),
                 'orden_compra_tipo_doc'          => $this->tipoDoc ?: null,
-                'orden_compra_numero_doc'        => $this->numeroDoc ?: null,
+                'orden_compra_numero_doc'        => ($this->docSerie && $this->docCorrelativo)
+                    ? trim($this->docSerie, '-') . '-' . trim($this->docCorrelativo, '-')
+                    : ($this->numeroDoc ?: null),
                 'orden_compra_fecha_emision_doc'    => $this->fechaEmision ?: null,
                 'orden_compra_fecha_vencimiento'    => $this->fechaVencimiento ?: null,
                 'orden_compra_guia_remitente'             => $this->guiaRemitente ?: null,
@@ -430,7 +451,7 @@ class Compras extends Component
                 'orden_compra_total'                      => $total,
                 'orden_compra_flete'                      => $flete,
                 'orden_compra_gastos_operativos'          => $gastos,
-                'orden_compra_descuento_porcentaje'       => $descuentoPct,
+                'orden_compra_descuento_porcentaje'       => 0,
                 'orden_compra_descuento_monto'            => $descuentoMonto,
                 'orden_compra_igv_porcentaje'             => $igvPct,
                 'orden_compra_igv_monto'                  => $igvMonto,
@@ -503,8 +524,7 @@ class Compras extends Component
 
             DB::commit();
             $this->limpiarFormulario();
-            $this->vista = 'historial';
-            $this->resetPage();
+            $this->vista = 'nueva';
             session()->flash('success', "Compra {$numero} registrada. Recepcione cuando llegue la mercadería.");
         } catch (\Exception $e) {
             DB::rollBack();
@@ -966,28 +986,130 @@ class Compras extends Component
         }
     }
 
+    // ── Nuevo proveedor ───────────────────────────────────────
+    public function npBuscarDoc(): void
+    {
+        $numero = trim($this->npNumDoc);
+        $longitud = strlen($numero);
+
+        if (!in_array($longitud, [8, 11])) {
+            $this->npDocMensaje     = 'Ingresa un RUC (11 dígitos) o DNI (8 dígitos).';
+            $this->npDocMensajeTipo = 'error';
+            return;
+        }
+
+        $this->npDocMensaje     = '';
+        $this->npDocMensajeTipo = '';
+
+        try {
+            if ($longitud === 11) {
+                $response = Http::withHeaders(['Accept' => 'application/json'])
+                    ->asForm()
+                    ->post('https://api.migo.pe/api/v1/ruc', [
+                        'token' => config('services.tokens.api_migo'),
+                        'ruc'   => $numero,
+                    ]);
+                $data = $response->json();
+
+                if ($data['success'] ?? false) {
+                    $this->npNombre    = strtoupper($data['nombre_o_razon_social'] ?? '');
+                    $this->npDireccion = mb_convert_case(strtolower($data['direccion_simple'] ?? ''), MB_CASE_TITLE, 'UTF-8');
+                    $this->npTipoDoc   = 4;
+                    $this->npDocMensaje     = 'Datos del RUC encontrados.';
+                    $this->npDocMensajeTipo = 'success';
+                } else {
+                    $this->npDocMensaje     = $data['message'] ?? 'RUC no encontrado.';
+                    $this->npDocMensajeTipo = 'error';
+                }
+            } else {
+                $response = Http::withHeaders(['Accept' => 'application/json'])
+                    ->asForm()
+                    ->post('https://api.migo.pe/api/v1/dni', [
+                        'token' => config('services.tokens.api_migo'),
+                        'dni'   => $numero,
+                    ]);
+                $data = $response->json();
+
+                if ($data['success'] ?? false) {
+                    $nombre = trim(($data['nombres'] ?? '') . ' ' . ($data['apellido_paterno'] ?? '') . ' ' . ($data['apellido_materno'] ?? ''));
+                    $this->npNombre         = strtoupper($nombre);
+                    $this->npTipoDoc        = 2;
+                    $this->npDocMensaje     = 'Datos del DNI encontrados.';
+                    $this->npDocMensajeTipo = 'success';
+                } else {
+                    $this->npDocMensaje     = $data['message'] ?? 'DNI no encontrado.';
+                    $this->npDocMensajeTipo = 'error';
+                }
+            }
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            $this->npDocMensaje     = 'Error al consultar el servicio externo.';
+            $this->npDocMensajeTipo = 'error';
+        }
+    }
+
+    public function guardarNuevoProveedor(): void
+    {
+        $this->validate([
+            'npNombre' => 'required|string|max:255',
+            'npNumDoc' => 'required|string|max:20',
+        ], [
+            'npNombre.required' => 'El nombre / razón social es obligatorio.',
+            'npNumDoc.required' => 'El número de documento es obligatorio.',
+        ]);
+
+        $id = DB::table('proveedores')->insertGetId([
+            'id_tipo_documento'           => $this->npTipoDoc,
+            'proveedores_nombre'          => strtoupper(trim($this->npNombre)),
+            'proveedores_numero_documento'=> trim($this->npNumDoc),
+            'proveedores_direccion'       => trim($this->npDireccion) ?: null,
+            'proveedores_telefono'        => trim($this->npTelefono) ?: null,
+            'proveedores_correo'          => trim($this->npCorreo) ?: null,
+            'proveedores_estado'          => 1,
+            'created_at'                  => now(),
+            'updated_at'                  => now(),
+        ]);
+
+        $this->idProveedor = $id;
+        $this->updatedIdProveedor();
+
+        $this->reset(['npNombre', 'npNumDoc', 'npDireccion', 'npTelefono', 'npCorreo', 'npDocMensaje', 'npDocMensajeTipo']);
+        $this->npTipoDoc = 4;
+
+        $this->dispatch('cerrarModalNuevoProveedor');
+    }
+
+    public function toggleRevertirIgv(): void
+    {
+        $this->revertirDesagregarIgv = !$this->revertirDesagregarIgv;
+    }
+
     // ── Limpiar ───────────────────────────────────────────────
     public function limpiarFormulario(): void
     {
         $this->docAdjunto = null;
         $this->reset([
-            'empresaIdCompra', 'idProveedor', 'idTipoPago', 'proveedorRuc',
-            'tipoDoc', 'numeroDoc', 'fechaVencimiento', 'fechaAlmacenamiento',
+            'empresaIdCompra', 'idProveedor', 'idTipoPago', 'proveedorRuc', 'proveedorRazonSocial',
+            'docSerie', 'docCorrelativo', 'numeroDoc', 'fechaVencimiento',
             'guiaRemitente', 'guiaTransportista', 'transportistas',
             'observacion', 'flete', 'gastosOp',
-            'descuentoPorcentaje', 'igvPorcentaje', 'percepcionPorcentaje',
+            'descuentoImporte', 'revertirDesagregarIgv', 'igvPorcentaje', 'percepcionPorcentaje',
             'items', 'buscarProducto', 'resultadosBusqueda',
         ]);
         $this->empresaIdCompra      = 1;
         $this->condicionPago        = 'contado';
+        $this->estadoOrden          = 'recibido';
+        $this->tipoDoc              = 'FACTURA';
         $this->moneda               = 'PEN';
         $this->flete                = '0';
         $this->gastosOp             = '0';
-        $this->descuentoPorcentaje  = '0';
+        $this->descuentoImporte     = '0';
         $this->igvPorcentaje        = '0';
         $this->percepcionPorcentaje = '0';
         $this->transportistas       = [['nombre' => '']];
         $this->fechaEmision         = now()->format('Y-m-d');
+        $this->fechaAlmacenamiento  = now()->endOfMonth()->format('Y-m-d');
+        $this->proximoNumero = (string) ((int) DB::table('orden_compra')->max('id_orden_compra') + 1);
         $this->resetErrorBag();
         $this->resetValidation();
     }
@@ -1225,11 +1347,13 @@ class Compras extends Component
             ->orderBy('proveedores_nombre')
             ->get();
 
-        $subtotal           = round(collect($this->items)->sum('total'), 2);
-        $descuentoPct       = max(0, min(100, (float) $this->descuentoPorcentaje));
-        $descuentoMonto     = round($subtotal * $descuentoPct / 100, 2);
-        $subtotalNeto       = round($subtotal - $descuentoMonto, 2);
         $igvPct             = max(0, (float) $this->igvPorcentaje);
+        $rawSubtotal        = round(collect($this->items)->sum('total'), 2);
+        $subtotal           = ($this->revertirDesagregarIgv && $igvPct > 0)
+            ? floor($rawSubtotal / (1 + $igvPct / 100) * 100) / 100
+            : $rawSubtotal;
+        $descuentoMonto     = round(max(0, (float) $this->descuentoImporte), 2);
+        $subtotalNeto       = round($subtotal - $descuentoMonto, 2);
         $igvMonto           = round($subtotalNeto * $igvPct / 100, 2);
         $percepcionPct      = max(0, (float) $this->percepcionPorcentaje);
         $percepcionMonto    = round(($subtotalNeto + $igvMonto) * $percepcionPct / 100, 2);

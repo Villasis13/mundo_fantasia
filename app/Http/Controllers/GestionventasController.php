@@ -1503,25 +1503,6 @@ class GestionventasController extends Controller
         $pdf->Cell($cw / 2, 4, utf8_decode('Nro de Transacciones:'), 0, 0, 'L');
         $pdf->Cell($cw / 2, 4, (string) $nroTransacciones, 0, 1, 'R');
 
-        $pdf->Ln(2);
-        $pdf->SetDrawColor(180, 180, 180);
-        $pdf->Line(5, $pdf->GetY(), 75, $pdf->GetY());
-        $pdf->SetDrawColor(60, 60, 60);
-        $pdf->Ln(2);
-
-        $filasNotaVta = [
-            'Nro Nota Venta Inicial'  => '0',
-            'Nro Nota Final'          => '0',
-            'Venta Total Nota Venta'  => 'S/ 0.00',
-            'Nro NotaVta Anulados'    => '0',
-            'Total NotaVta Anulados'  => 'S/ 0.00',
-        ];
-        $pdf->SetFont('Helvetica', '', 7);
-        foreach ($filasNotaVta as $label => $valor) {
-            $pdf->Cell($cw / 2, 4, utf8_decode($label . ':'), 0, 0, 'L');
-            $pdf->Cell($cw / 2, 4, $valor, 0, 1, 'R');
-        }
-
         // ── Boletas ─────────────────────────────────────────────
         $pdf->Ln(2);
         $pdf->SetDrawColor(180, 180, 180);
@@ -1551,7 +1532,7 @@ class GestionventasController extends Controller
             ->where('venta_tipo', '03')
             ->sum('venta_total');
 
-        $fmtBoleta = fn($b) => $b ? $b->venta_serie . '-' . str_pad($b->venta_correlativo, 8, '0', STR_PAD_LEFT) : 'Sin registro';
+        $fmtBoleta = fn($b) => $b ? $b->venta_serie . '-' . (int)$b->venta_correlativo : 'Sin registro';
 
         $filasBoleta = [
             'Nro de Boleta Inicial'  => $fmtBoleta($boletaInicial),
@@ -1595,7 +1576,7 @@ class GestionventasController extends Controller
             ->where('venta_tipo', '01')
             ->sum('venta_total');
 
-        $fmtFactura = fn($f) => $f ? $f->venta_serie . '-' . str_pad($f->venta_correlativo, 8, '0', STR_PAD_LEFT) : 'Sin registro';
+        $fmtFactura = fn($f) => $f ? $f->venta_serie . '-' . (int)$f->venta_correlativo : 'Sin registro';
 
         $filasFactura = [
             'Nro de Factura Inicial'  => $fmtFactura($facturaInicial),
@@ -1622,12 +1603,9 @@ class GestionventasController extends Controller
         $pdf->Cell($cw, 6, 'Total de Ventas', 0, 1, 'C');
         $pdf->Ln(1);
 
-        $totalVta      = 0.00;
-        $totalGeneral  = $totalVta + (float)$totalBoletas + (float)$totalFacturas;
+        $totalGeneral  = (float)$totalBoletas + (float)$totalFacturas;
 
         $pdf->SetFont('Helvetica', '', 7);
-        $pdf->Cell($cw / 2, 4, 'Venta Total Vta:', 0, 0, 'L');
-        $pdf->Cell($cw / 2, 4, 'S/ ' . number_format($totalVta, 2), 0, 1, 'R');
         $pdf->Cell($cw / 2, 4, 'Venta Total Boleta:', 0, 0, 'L');
         $pdf->Cell($cw / 2, 4, 'S/ ' . number_format((float)$totalBoletas, 2), 0, 1, 'R');
         $pdf->Cell($cw / 2, 4, 'Venta Total Facturas:', 0, 0, 'L');
@@ -1664,17 +1642,13 @@ class GestionventasController extends Controller
             ->sum('venta_total');
 
         $medios = [
-            'CREDITO'              => (float)$totalCredito,
-            'EFECTIVO'             => $pagosPorTipo->get('EFECTIVO', 0),
-            'POS'                  => $pagosPorTipo->get('POS', 0),
-            'YAPE'                 => $pagosPorTipo->get('YAPE', 0),
-            'PLIN'                 => $pagosPorTipo->get('PLIN', 0),
-            'QR'                   => $pagosPorTipo->get('QR', 0),
-            'TRANSFERENCIA'        => $pagosPorTipo->get('TRANSFERENCIA BANCARIA', $pagosPorTipo->get('TRANSFERENCIA', 0)),
-            'DEPOSITO'             => $pagosPorTipo->get('DEPÓSITO', $pagosPorTipo->get('DEPOSITO', 0)),
-            'CHEQUE'               => $pagosPorTipo->get('CHEQUE', 0),
-            'TARJETA DEBITO'       => $pagosPorTipo->get('TARJETA DÉBITO', $pagosPorTipo->get('TARJETA DEBITO', 0)),
-            'TARJETA CREDITO'      => $pagosPorTipo->get('TARJETA CRÉDITO', $pagosPorTipo->get('TARJETA CREDITO', 0)),
+            'Credito'       => (float)$totalCredito,
+            'Efectivo'      => $pagosPorTipo->get('EFECTIVO', 0),
+            'Yape'          => $pagosPorTipo->get('YAPE', 0),
+            'Plin'          => $pagosPorTipo->get('PLIN', 0),
+            'Transferencia' => $pagosPorTipo->get('TRANSFERENCIA BANCARIA', $pagosPorTipo->get('TRANSFERENCIA', 0)),
+            'Deposito'      => $pagosPorTipo->get('DEPÓSITO', $pagosPorTipo->get('DEPOSITO', 0)),
+            'Cheque'        => $pagosPorTipo->get('CHEQUE', 0),
         ];
 
         $pdf->SetFont('Helvetica', '', 7);
@@ -1697,7 +1671,12 @@ class GestionventasController extends Controller
             ->get()
             ->mapWithKeys(fn($r) => [strtoupper($r->marca_tarjeta) => (float)$r->total]);
 
-        $marcas = ['VISA', 'MASTERCARD', 'AMERICAN EXPRESS', 'UNIONPAY'];
+        $marcas = [
+            'Tarjeta - Visa'             => 'VISA',
+            'Tarjeta - Mastercard'       => 'MASTERCARD',
+            'Tarjeta - American Express' => 'AMERICAN EXPRESS',
+            'Tarjeta - UnionPay'         => 'UNIONPAY',
+        ];
 
         $pdf->Ln(2);
         $pdf->SetDrawColor(180, 180, 180);
@@ -1706,11 +1685,11 @@ class GestionventasController extends Controller
         $pdf->Ln(2);
 
         $pdf->SetFont('Helvetica', '', 7);
-        foreach ($marcas as $marca) {
-            $monto = $marcasTotales->get($marca, 0);
-            $pdf->SetX(13);
-            $pdf->Cell(27, 4, utf8_decode($marca . ':'), 0, 0, 'L');
-            $pdf->Cell(27, 4, 'S/ ' . number_format((float)$monto, 2), 0, 1, 'R');
+        foreach ($marcas as $label => $key) {
+            $monto = $marcasTotales->get($key, 0);
+            $pdf->SetX(5);
+            $pdf->Cell($cw / 2, 4, utf8_decode($label . ':'), 0, 0, 'L');
+            $pdf->Cell($cw / 2, 4, 'S/ ' . number_format((float)$monto, 2), 0, 1, 'R');
         }
 
         $totalMarcas = $marcasTotales->sum();

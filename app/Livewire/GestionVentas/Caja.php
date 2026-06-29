@@ -90,6 +90,18 @@ class Caja extends Component
     public array $tiposPago    = [];
     public bool  $esGratuita   = false;
 
+    // ── Rectificar comprobante ────────────────────────────────
+    public int    $rectVentaId    = 0;
+    public int    $rectVendedor   = 0;
+    public int    $rectCobrador   = 0;
+    public int    $rectFormasPago = 1;
+    public array  $rectMedios            = []; // [['id_tipo_pago'=>x,'marca'=>'','label'=>'','monto'=>'0.00'], ...]
+    public array  $rectUsuariosVendedor  = [];
+    public array  $rectUsuariosCobrador  = [];
+    public ?int   $rectIdPedido          = null;
+    public ?int   $rectIdProfo    = null;
+    public float  $rectTotalVenta = 0;
+
     private $logs;
 
     public function boot(): void
@@ -100,6 +112,8 @@ class Caja extends Component
     public function mount(): void
     {
         abort_if(!auth()->user()->can('caja_pedidos.listar'), 403);
+
+        $this->expirarPedidosVencidos();
 
         $caja = (new CajaModel())->buscar_apertura_caja();
         if ($caja) {
@@ -120,6 +134,8 @@ class Caja extends Component
 
         $this->tiposPago = DB::table('tipo_pago')
             ->where('tipo_pago_estado', 1)
+            ->where('tipo_pago_nombre', 'not like', '%QR%')
+            ->where('tipo_pago_nombre', 'not like', '%POS%')
             ->orderBy('id_tipo_pago')
             ->get()
             ->toArray();
@@ -435,6 +451,204 @@ class Caja extends Component
             }
         }
         $this->cargarSeries();
+    }
+
+    // ── Rectificar comprobante ────────────────────────────────
+
+    public function abrirRectificar(int $idVenta): void
+    {
+        $venta = DB::table('ventas')->where('id_venta', $idVenta)->first();
+        if (!$venta) return;
+
+        $this->rectVentaId    = $idVenta;
+        $this->rectTotalVenta = (float) $venta->venta_total;
+        $this->rectCobrador   = (int) $venta->id_users;
+        $this->rectFormasPago = (int) $venta->id_formas_pago;
+        $this->rectIdPedido   = $venta->id_pedido ? (int) $venta->id_pedido : null;
+        $this->rectIdProfo    = $venta->id_profo  ? (int) $venta->id_profo  : null;
+
+        if ($this->rectIdPedido) {
+            $this->rectVendedor = (int) (DB::table('pedidos')->where('id_pedido', $this->rectIdPedido)->value('id_users') ?? $venta->id_users);
+        } elseif ($this->rectIdProfo) {
+            $this->rectVendedor = (int) (DB::table('proformas')->where('id_profo', $this->rectIdProfo)->value('id_users') ?? $venta->id_users);
+        } else {
+            $this->rectVendedor = (int) $venta->id_users;
+        }
+
+        $pagosActuales = DB::table('ventas_detalle_pagos')
+            ->where('id_venta', $idVenta)
+            ->get()
+            ->keyBy(fn($p) => $p->id_tipo_pago . ':' . ($p->marca_tarjeta ?? ''));
+
+        $medios = [];
+        $tarjetaAgregada = false;
+        foreach ($this->tiposPago as $tp) {
+            $esTarjeta = str_contains(strtoupper((string)($tp->tipo_pago_nombre ?? '')), 'TARJETA');
+            if ($esTarjeta && !$tarjetaAgregada) {
+                $tarjetaAgregada = true;
+                foreach (['Visa', 'Mastercard', 'American Express', 'UnionPay'] as $m) {
+                    $pago = $pagosActuales->get($tp->id_tipo_pago . ':' . $m);
+                    $medios[] = [
+                        'id_tipo_pago' => (int) $tp->id_tipo_pago,
+                        'marca'        => $m,
+                        'label'        => 'Tarjeta - ' . $m,
+                        'monto'        => $pago ? number_format((float)$pago->venta_detalle_pago_monto, 2, '.', '') : '0.00',
+                    ];
+                }
+            } elseif (!$esTarjeta) {
+                $pago = $pagosActuales->first(fn($p) => $p->id_tipo_pago == $tp->id_tipo_pago && empty($p->marca_tarjeta));
+                $medios[] = [
+                    'id_tipo_pago' => (int) $tp->id_tipo_pago,
+                    'marca'        => '',
+                    'label'        => (string)($tp->tipo_pago_nombre ?? ''),
+                    'monto'        => $pago ? number_format((float)$pago->venta_detalle_pago_monto, 2, '.', '') : '0.00',
+                ];
+            }
+        }
+        $this->rectMedios = $medios;
+        $this->cargarUsuariosRectificar();
+        $this->dispatch('abrirModalRectificar');
+    }
+
+    public function guardarRectificar(): void
+    {
+        if (!$this->rectVentaId) return;
+
+        // Validar suma de medios == total venta (solo Contado)
+        if ($this->rectFormasPago == 1) {
+            $totalVenta = (float) DB::table('ventas')
+                ->where('id_venta', $this->rectVentaId)
+                ->value('venta_total');
+            $sumaMedios = collect($this->rectMedios)
+                ->sum(fn($m) => (float) str_replace(',', '.', $m['monto'] ?? '0'));
+            if (round($sumaMedios, 2) !== round($totalVenta, 2)) {
+                $this->dispatch('rectificar-error',
+                    mensaje: 'Los medios de pago (S/ ' . number_format($sumaMedios, 2) . ') no coinciden con el total del comprobante (S/ ' . number_format($totalVenta, 2) . ').'
+                );
+                return;
+            }
+        }
+
+        DB::beginTransaction();
+        try {
+            DB::table('ventas')->where('id_venta', $this->rectVentaId)->update([
+                'id_users'       => $this->rectCobrador,
+                'id_formas_pago' => $this->rectFormasPago,
+                'updated_at'     => now(),
+            ]);
+
+            if ($this->rectIdPedido) {
+                DB::table('pedidos')->where('id_pedido', $this->rectIdPedido)
+                    ->update(['id_users' => $this->rectVendedor, 'updated_at' => now()]);
+            } elseif ($this->rectIdProfo) {
+                DB::table('proformas')->where('id_profo', $this->rectIdProfo)
+                    ->update(['id_users' => $this->rectVendedor, 'updated_at' => now()]);
+            }
+
+            // Solo actualizar medios de pago en ventas al contado
+            if ($this->rectFormasPago == 1) {
+                DB::table('ventas_detalle_pagos')->where('id_venta', $this->rectVentaId)->delete();
+                foreach ($this->rectMedios as $medio) {
+                    $monto = (float) str_replace(',', '.', $medio['monto'] ?? '0');
+                    if ($monto <= 0) continue;
+                    DB::table('ventas_detalle_pagos')->insert([
+                        'id_venta'                  => $this->rectVentaId,
+                        'id_tipo_pago'              => $medio['id_tipo_pago'],
+                        'marca_tarjeta'             => $medio['marca'] ?: null,
+                        'venta_detalle_pago_monto'  => $monto,
+                        'venta_detalle_pago_estado' => 1,
+                        'created_at'                => now(),
+                        'updated_at'                => now(),
+                    ]);
+                }
+            }
+
+            DB::commit();
+            $this->cargarVentasResumen();
+            $this->dispatch('cerrarModalRectificar');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->logs->insertarLog($e);
+        }
+    }
+
+    private function cargarUsuariosRectificar(): void
+    {
+        // Vendedor: Desarrollador(1), Superadmin(2), Ventas(5) + el vendedor actual
+        $idsVendedor = DB::table('model_has_roles')
+            ->whereIn('role_id', [1, 2, 5])
+            ->pluck('model_id')->unique()->values()->toArray();
+        if ($this->rectVendedor > 0 && !in_array($this->rectVendedor, $idsVendedor)) {
+            $idsVendedor[] = $this->rectVendedor;
+        }
+
+        $this->rectUsuariosVendedor = DB::table('users as u')
+            ->where('u.users_estado', 1)
+            ->whereIn('u.id_users', $idsVendedor)
+            ->select('u.id_users', 'u.nombre_users')
+            ->orderBy('u.nombre_users')
+            ->get()->toArray();
+
+        // Cobrador: Desarrollador(1), Superadmin(2), Cajero(4) + el cobrador actual
+        $idsCobrador = DB::table('model_has_roles')
+            ->whereIn('role_id', [1, 2, 4])
+            ->pluck('model_id')->unique()->values()->toArray();
+        if ($this->rectCobrador > 0 && !in_array($this->rectCobrador, $idsCobrador)) {
+            $idsCobrador[] = $this->rectCobrador;
+        }
+
+        $this->rectUsuariosCobrador = DB::table('users as u')
+            ->where('u.users_estado', 1)
+            ->whereIn('u.id_users', $idsCobrador)
+            ->select('u.id_users', 'u.nombre_users')
+            ->orderBy('u.nombre_users')
+            ->get()->toArray();
+    }
+
+    private function expirarPedidosVencidos(): void
+    {
+        $vencidos = DB::table('pedidos')
+            ->where('pedido_estado', 0)
+            ->whereDate('created_at', '<', now()->toDateString())
+            ->get(['id_pedido', 'id_tienda', 'pedido_stock_reservado']);
+
+        foreach ($vencidos as $pedido) {
+            DB::beginTransaction();
+            try {
+                $locked = DB::table('pedidos')
+                    ->where('id_pedido', $pedido->id_pedido)
+                    ->where('pedido_estado', 0)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$locked) { DB::rollBack(); continue; }
+
+                if ($locked->pedido_stock_reservado) {
+                    $detalles = DB::table('pedidos_detalle')
+                        ->where('id_pedido', $pedido->id_pedido)
+                        ->where('pedido_deta_estado', 1)
+                        ->get();
+
+                    foreach ($detalles as $det) {
+                        if (!$det->id_pro) continue;
+                        $factor = (float)($det->pres_factor ?? 1.0);
+                        DB::table('producto_sucursal')
+                            ->where('id_pro', (int) $det->id_pro)
+                            ->where('id_tienda', $locked->id_tienda)
+                            ->increment('ps_stock', (float) $det->pedido_deta_cantidad * $factor);
+                    }
+                }
+
+                DB::table('pedidos')
+                    ->where('id_pedido', $pedido->id_pedido)
+                    ->update(['pedido_estado' => 3, 'updated_at' => now()]);
+
+                DB::commit();
+            } catch (\Exception $e) {
+                DB::rollBack();
+                $this->logs->insertarLog($e);
+            }
+        }
     }
 
     private function cargarSeries(): void
@@ -979,18 +1193,17 @@ class Caja extends Component
         return $tp ? (int)($tp->id_tipo_pago ?? $tp['id_tipo_pago']) : null;
     }
 
-    public function cambiarTipoPago(int $index, int $idTipoPago): void
+    public function cambiarTipoPago(int $index, string $valor): void
     {
-        if (isset($this->pagos[$index])) {
-            $this->pagos[$index]['id_tipo_pago']   = $idTipoPago;
-            $this->pagos[$index]['marca_tarjeta']  = '';
-        }
-    }
+        if (!isset($this->pagos[$index])) return;
 
-    public function cambiarMarcaTarjeta(int $index, string $marca): void
-    {
-        if (isset($this->pagos[$index])) {
+        if (str_contains($valor, ':')) {
+            [$id, $marca] = explode(':', $valor, 2);
+            $this->pagos[$index]['id_tipo_pago']  = (int) $id;
             $this->pagos[$index]['marca_tarjeta'] = $marca;
+        } else {
+            $this->pagos[$index]['id_tipo_pago']  = (int) $valor;
+            $this->pagos[$index]['marca_tarjeta'] = '';
         }
     }
 
@@ -1053,15 +1266,12 @@ class Caja extends Component
     public function cambiarTab(string $tab): void
     {
         $this->tabModal = $tab;
-    }
 
-    public function updatedTabModal(): void
-    {
-        if ($this->tabModal === 'cierre_caja') {
-            $this->cargarResumenCierre();
-        }
-        if ($this->tabModal === 'resumen_ventas') {
+        if ($tab === 'resumen_ventas') {
             $this->cargarVentasResumen();
+        }
+        if ($tab === 'cierre_caja') {
+            $this->cargarResumenCierre();
         }
     }
 
@@ -1080,6 +1290,10 @@ class Caja extends Component
             ->orderBy('v.id_venta', 'desc')
             ->select(
                 'v.id_venta',
+                'v.id_users',
+                'v.id_pedido',
+                'v.id_profo',
+                'v.id_formas_pago',
                 'v.venta_serie',
                 'v.venta_correlativo',
                 'v.venta_tipo',

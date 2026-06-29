@@ -121,6 +121,8 @@ class Pedidos extends Component
     {
         abort_if(!auth()->user()->can('pedidos.listar'), 403);
 
+        $this->expirarPedidosVencidos();
+
         // Resolver tienda/empresa del usuario logueado
         $tienda = DB::table('user_tienda as ut')
             ->join('tiendas as t', 't.id_tienda', '=', 'ut.id_tienda')
@@ -1120,9 +1122,9 @@ class Pedidos extends Component
 
         DB::beginTransaction();
         try {
-            // Generar número de pedido: PED-YYYY-NNNN
-            $year  = now()->format('Y');
-            $prefix = "PED-{$year}-";
+            // Generar número de pedido: PED-YYYYMMDD-NNN (correlativo diario)
+            $fecha  = now()->format('Ymd');
+            $prefix = "PED-{$fecha}-";
 
             $ultimo = DB::table('pedidos')
                 ->where('pedido_numero', 'like', $prefix . '%')
@@ -1135,7 +1137,7 @@ class Pedidos extends Component
                 $numero = (int) end($partes) + 1;
             }
 
-            $pedidoNumero = $prefix . str_pad($numero, 4, '0', STR_PAD_LEFT);
+            $pedidoNumero = $prefix . str_pad($numero, 3, '0', STR_PAD_LEFT);
 
             // Validar stock disponible y adquirir locks antes de insertar
             foreach (collect($this->items)->sortBy('id_pro') as $item) {
@@ -1265,6 +1267,54 @@ class Pedidos extends Component
             DB::rollBack();
             $this->logs->insertarLog($e);
             session()->flash('error', 'Error al anular el pedido.');
+        }
+    }
+
+    // ── Expirar pedidos de días anteriores ───────────────────
+
+    private function expirarPedidosVencidos(): void
+    {
+        $vencidos = DB::table('pedidos')
+            ->where('pedido_estado', 0)
+            ->whereDate('created_at', '<', now()->toDateString())
+            ->get(['id_pedido', 'id_tienda', 'pedido_stock_reservado']);
+
+        foreach ($vencidos as $pedido) {
+            DB::beginTransaction();
+            try {
+                $locked = DB::table('pedidos')
+                    ->where('id_pedido', $pedido->id_pedido)
+                    ->where('pedido_estado', 0)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$locked) { DB::rollBack(); continue; }
+
+                if ($locked->pedido_stock_reservado) {
+                    $detalles = DB::table('pedidos_detalle')
+                        ->where('id_pedido', $pedido->id_pedido)
+                        ->where('pedido_deta_estado', 1)
+                        ->get();
+
+                    foreach ($detalles as $det) {
+                        if (!$det->id_pro) continue;
+                        $factor = (float)($det->pres_factor ?? 1.0);
+                        DB::table('producto_sucursal')
+                            ->where('id_pro', (int) $det->id_pro)
+                            ->where('id_tienda', $locked->id_tienda)
+                            ->increment('ps_stock', (float) $det->pedido_deta_cantidad * $factor);
+                    }
+                }
+
+                DB::table('pedidos')
+                    ->where('id_pedido', $pedido->id_pedido)
+                    ->update(['pedido_estado' => 3, 'updated_at' => now()]);
+
+                DB::commit();
+            } catch (\Exception $e) {
+                DB::rollBack();
+                $this->logs->insertarLog($e);
+            }
         }
     }
 

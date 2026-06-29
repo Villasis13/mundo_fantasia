@@ -9,6 +9,7 @@
     .rv-header-caja  { font-size:12px; font-weight:700; color:#185FA5; background:#E6F1FB; padding:2px 8px; border-radius:10px; display:flex; align-items:center; gap:4px; }
     .rv-icon-btn { background:transparent; border:none; cursor:pointer; padding:0; display:flex; align-items:center; }
     .rv-sticky-resumen { position:sticky; top:16px; }
+    [x-cloak] { display:none !important; }
 
     /* ── Card ──────────────────────────────── */
     .rv-card { background:#fff; border:1px solid #e9ecef; border-radius:12px; overflow:hidden; }
@@ -147,190 +148,193 @@
     ═══════════════════════════════════════════════════════════ --}}
     <div class="modal fade" id="modalSeleccionarPedido" wire:ignore.self tabindex="-1"
          aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
             <div class="modal-content border-0 shadow-lg">
-                <div class="modal-header border-bottom py-2 px-3">
+
+                {{-- Cabecera --}}
+                <div class="modal-header border-bottom px-4 py-3">
                     <div class="d-flex align-items-center gap-3 w-100">
-                        <h6 class="modal-title fw-bold mb-0 me-auto">
-                            <i class="fa-solid fa-cash-register me-2 text-success"></i>Seleccionar Pedido / Proforma
-                            @if($nombreTienda) <span class="text-muted fw-normal" style="font-size:13px;">— {{ $nombreTienda }}</span> @endif
+                        <h5 class="modal-title fw-bold mb-0 me-auto" style="font-size:17px;">
+                            <i class="fa-solid fa-cash-register me-2 text-success"></i>Pedidos / Proformas
+                            @if($nombreTienda) <span class="text-muted fw-normal" style="font-size:14px;">— {{ $nombreTienda }}</span> @endif
                             @if($nombreCaja) <span class="rv-header-caja ms-2">{{ $nombreCaja }}</span> @endif
-                        </h6>
+                        </h5>
                         <input type="text"
                                id="buscarModalInput"
                                wire:model.live.debounce.350ms="buscarModal"
-                               class="form-control form-control-sm"
+                               class="form-control"
                                placeholder="Buscar por N°, cliente, doc..."
-                               style="max-width:230px;">
+                               style="max-width:260px;font-size:14px;">
                         <button type="button" class="btn-close flex-shrink-0"
                                 data-bs-dismiss="modal" aria-label="Cerrar" title="Cerrar"></button>
                     </div>
                 </div>
 
+                {{-- Wrapper relativo para overlay de carga --}}
+                <div style="position:relative;">
+
                 {{-- Tabs --}}
-                <div class="px-3 py-2 border-bottom" style="background:#f0f2f5;">
+                <div class="px-4 pt-3 pb-0 border-bottom" style="background:#f8f9fa;">
                     <div class="d-flex align-items-center gap-2 flex-wrap">
 
                         {{-- Grupo principal: Pedidos / Proformas --}}
-                        <div class="d-flex align-items-center rounded-3 p-1" style="background:#e2e5ea;gap:3px;">
+                        <div class="d-flex align-items-center rounded-3 p-1" style="background:#e2e5ea;gap:4px;">
                             <button type="button" wire:click="cambiarTab('pedidos')"
                                     wire:loading.attr="disabled" wire:target="cambiarTab"
-                                    class="btn btn-sm d-flex align-items-center gap-1 fw-semibold"
-                                    style="font-size:12.5px;border-radius:6px;padding:5px 13px;border:none;transition:all .15s;
+                                    class="btn d-flex align-items-center gap-2 fw-bold"
+                                    style="font-size:15px;border-radius:8px;padding:10px 22px;border:none;transition:all .15s;
                                            {{ $tabModal === 'pedidos'
-                                               ? 'background:#fff;color:#0d6efd;box-shadow:0 1px 4px rgba(0,0,0,.15);'
+                                               ? 'background:#fff;color:#0d6efd;box-shadow:0 2px 6px rgba(0,0,0,.12);'
                                                : 'background:transparent;color:#6c757d;' }}">
-                                <i class="fa-solid fa-clipboard-list" style="font-size:11px;"></i>
-                                PEDIDOS
-                                <span class="ms-1 rounded px-1" style="font-size:10px;font-family:monospace;
+                                <i class="fa-solid fa-clipboard-list"></i>
+                                Pedidos
+                                <span class="rounded px-1" style="font-size:11px;font-family:monospace;
                                       {{ $tabModal === 'pedidos' ? 'background:#e7f0ff;color:#0d6efd;' : 'background:#d1d5db;color:#6c757d;' }}">F3</span>
                             </button>
                             <button type="button" wire:click="cambiarTab('proformas')"
                                     wire:loading.attr="disabled" wire:target="cambiarTab"
-                                    class="btn btn-sm d-flex align-items-center gap-1 fw-semibold"
-                                    style="font-size:12.5px;border-radius:6px;padding:5px 13px;border:none;transition:all .15s;
+                                    class="btn d-flex align-items-center gap-2 fw-bold"
+                                    style="font-size:15px;border-radius:8px;padding:10px 22px;border:none;transition:all .15s;
                                            {{ $tabModal === 'proformas'
-                                               ? 'background:#fff;color:#0d6efd;box-shadow:0 1px 4px rgba(0,0,0,.15);'
+                                               ? 'background:#fff;color:#0d6efd;box-shadow:0 2px 6px rgba(0,0,0,.12);'
                                                : 'background:transparent;color:#6c757d;' }}">
-                                <i class="fa-solid fa-file-contract" style="font-size:11px;"></i>
-                                PROFORMAS
-                                <span class="ms-1 rounded px-1" style="font-size:10px;font-family:monospace;
+                                <i class="fa-solid fa-file-contract"></i>
+                                Proformas
+                                <span class="rounded px-1" style="font-size:11px;font-family:monospace;
                                       {{ $tabModal === 'proformas' ? 'background:#e7f0ff;color:#0d6efd;' : 'background:#d1d5db;color:#6c757d;' }}">F7</span>
                             </button>
                         </div>
 
                         @if($validarCaja)
-                        {{-- Divisor --}}
-                        <div style="width:1px;height:28px;background:#ced4da;flex-shrink:0;"></div>
+                        <div style="width:1px;height:32px;background:#ced4da;flex-shrink:0;"></div>
 
-                        {{-- Registro de Ventas --}}
                         <button type="button" wire:click="cambiarTab('resumen_ventas')"
                                 wire:loading.attr="disabled" wire:target="cambiarTab"
-                                class="btn btn-sm d-flex align-items-center gap-1 fw-semibold"
-                                style="font-size:12.5px;border-radius:6px;padding:5px 13px;border:none;transition:all .15s;
+                                class="btn d-flex align-items-center gap-2 fw-bold"
+                                style="font-size:14px;border-radius:8px;padding:10px 18px;border:none;transition:all .15s;
                                        {{ $tabModal === 'resumen_ventas'
-                                           ? 'background:#0C447C;color:#fff;box-shadow:0 1px 4px rgba(12,68,124,.35);'
+                                           ? 'background:#0C447C;color:#fff;box-shadow:0 2px 6px rgba(12,68,124,.3);'
                                            : 'background:#dce8f5;color:#0C447C;' }}">
-                            <i class="fa-solid fa-chart-bar" style="font-size:11px;"></i>
-                            REGISTRO DE VENTAS
+                            <i class="fa-solid fa-chart-bar"></i>
+                            Registro de Ventas
                         </button>
 
-                        {{-- Cierre de Caja --}}
                         <button type="button" wire:click="cambiarTab('cierre_caja')"
                                 wire:loading.attr="disabled" wire:target="cambiarTab"
-                                class="btn btn-sm d-flex align-items-center gap-1 fw-semibold"
-                                style="font-size:12.5px;border-radius:6px;padding:5px 13px;border:none;transition:all .15s;
+                                class="btn d-flex align-items-center gap-2 fw-bold"
+                                style="font-size:14px;border-radius:8px;padding:10px 18px;border:none;transition:all .15s;
                                        {{ $tabModal === 'cierre_caja'
-                                           ? 'background:#dc3545;color:#fff;box-shadow:0 1px 4px rgba(220,53,69,.35);'
+                                           ? 'background:#dc3545;color:#fff;box-shadow:0 2px 6px rgba(220,53,69,.3);'
                                            : 'background:#fde8ea;color:#dc3545;' }}">
-                            <i class="fa-solid fa-door-closed" style="font-size:11px;"></i>
-                            CIERRE DE CAJA
+                            <i class="fa-solid fa-door-closed"></i>
+                            Cierre de Caja
                         </button>
                         @endif
 
                     </div>
                 </div>
 
-                <div class="modal-body p-0" style="max-height:480px;overflow-y:auto;position:relative;">
-
-                    {{-- Loading overlay al cambiar tab --}}
-                    <div class="d-none align-items-center justify-content-center"
-                         wire:loading.class.remove="d-none"
-                         wire:loading.class="d-flex"
-                         wire:target="cambiarTab"
-                         style="position:absolute;inset:0;background:rgba(255,255,255,.75);z-index:20;backdrop-filter:blur(1px);">
-                        <div class="d-flex align-items-center gap-2" style="color:#185FA5;">
-                            <div class="spinner-border spinner-border-sm" role="status" style="width:18px;height:18px;border-width:2px;"></div>
-                            <span style="font-size:13px;font-weight:600;">Cargando...</span>
-                        </div>
+                {{-- Loading overlay al cambiar tab --}}
+                <div wire:loading wire:target="cambiarTab"
+                     style="position:absolute;inset:0;background:rgba(255,255,255,.75);z-index:1050;backdrop-filter:blur(1px);">
+                    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:0.5rem;color:#185FA5;">
+                        <div class="spinner-border spinner-border-sm" role="status" style="width:18px;height:18px;border-width:2px;"></div>
+                        <span style="font-size:14px;font-weight:600;">Cargando...</span>
                     </div>
+                </div>
+
+                <div class="modal-body p-0" style="max-height:520px;overflow-y:auto;">
 
                     {{-- Apertura caja (cuando cerrada) --}}
                     @if(!$validarCaja)
                     @if($cajaCerradaHoy)
                     {{-- Ya cerró caja hoy: bloquear apertura --}}
-                    <div class="p-4 border-bottom text-center" style="background:#fff8f8;">
-                        <div style="width:52px;height:52px;background:#FEE2E2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">
-                            <i class="fa-solid fa-ban" style="color:#dc3545;font-size:22px;"></i>
+                    <div class="py-5 text-center" style="background:#fff8f8;">
+                        <div style="width:64px;height:64px;background:#FEE2E2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+                            <i class="fa-solid fa-ban" style="color:#dc3545;font-size:28px;"></i>
                         </div>
-                        <div class="fw-bold mb-1" style="font-size:14px;color:#dc3545;">Caja ya cerrada hoy</div>
-                        <div class="text-muted" style="font-size:12px;max-width:340px;margin:0 auto;">
+                        <div class="fw-bold mb-2" style="font-size:18px;color:#dc3545;">Caja ya cerrada hoy</div>
+                        <div class="text-muted mx-auto" style="font-size:15px;max-width:380px;line-height:1.6;">
                             Ya aperturaste y cerraste una caja el día de hoy.<br>
                             No es posible abrir otra caja hasta el día siguiente.
                         </div>
-                        <div class="mt-3 d-inline-flex align-items-center gap-2 px-3 py-2 rounded-2"
-                             style="background:#f0f4f8;border:1px solid #dee2e6;font-size:12px;color:#6c757d;">
+                        <div class="mt-4 d-inline-flex align-items-center gap-2 px-4 py-2 rounded-3"
+                             style="background:#f0f4f8;border:1px solid #dee2e6;font-size:14px;color:#6c757d;">
                             <i class="fa-solid fa-clock"></i>
-                            Vuelve mañana para aperturar una nueva caja
+                            Vuelve mañana para abrir una nueva caja
                         </div>
                     </div>
                     @else
                     {{-- Formulario de apertura --}}
-                    <div class="p-3 border-bottom" style="background:#fffdf5;">
-                        <div class="d-flex align-items-center gap-2 mb-3">
-                            <div style="width:34px;height:34px;background:#FEF3C7;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                                <i class="fa-solid fa-key" style="color:#92400E;font-size:14px;"></i>
+                    <div class="py-5 px-4" style="background:#fffdf5;border-bottom:2px solid #fde68a;">
+                        <div class="text-center mb-4">
+                            <div style="width:64px;height:64px;background:#FEF3C7;border-radius:18px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;">
+                                <i class="fa-solid fa-key" style="color:#92400E;font-size:28px;"></i>
                             </div>
-                            <div>
-                                <div class="fw-bold" style="font-size:13px;color:#92400E;">Caja cerrada</div>
-                                <div class="text-muted" style="font-size:11px;">Apertura tu caja para comenzar a cobrar</div>
-                            </div>
+                            <h5 class="fw-bold mb-1" style="font-size:20px;color:#92400E;">Caja cerrada</h5>
+                            <p class="mb-0" style="font-size:16px;color:#6c757d;">Apertura tu caja para comenzar a cobrar</p>
                         </div>
-                        <div class="row g-2 align-items-end">
-                            <div class="col-12 col-sm-5">
-                                <label class="rv-fl">Seleccionar caja</label>
-                                <select class="rv-select" wire:model="idCajaParaAbrir">
-                                    <option value="">-- Seleccionar --</option>
+
+                        <div class="mx-auto" style="max-width:500px;">
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" style="font-size:15px;">Caja</label>
+                                <select class="form-select" style="font-size:16px;padding:11px 14px;height:auto;"
+                                        wire:model="idCajaParaAbrir">
+                                    <option value="">— Seleccionar caja —</option>
                                     @foreach($cajasDisponibles as $cj)
                                     <option value="{{ $cj['id_caja_numero'] }}" {{ $cj['ya_abierta'] ? 'disabled' : '' }}>
                                         {{ $cj['caja_numero_nombre'] }}{{ $cj['ya_abierta'] ? ' (ya abierta)' : '' }}
                                     </option>
                                     @endforeach
                                 </select>
-                                @error('idCajaParaAbrir') <small class="text-danger">{{ $message }}</small> @enderror
+                                @error('idCajaParaAbrir') <div class="text-danger mt-1" style="font-size:14px;">{{ $message }}</div> @enderror
                             </div>
-                            <div class="col-12 col-sm-4">
-                                <label class="rv-fl">Monto apertura (S/)</label>
-                                <div class="d-flex">
-                                    <span class="rv-prefix">S/</span>
-                                    <input type="text" inputmode="decimal" class="rv-input rv-money"
-                                           placeholder="0.00" wire:model="montoAperturaForm"
+
+                            <div class="mb-4">
+                                <label class="form-label fw-semibold" style="font-size:15px;">Monto de apertura</label>
+                                <div class="input-group">
+                                    <span class="input-group-text fw-bold" style="font-size:17px;padding:11px 16px;background:#f0f4f8;">S/</span>
+                                    <input type="text" inputmode="decimal"
+                                           class="form-control"
+                                           style="font-size:20px;padding:11px 14px;font-weight:700;letter-spacing:.02em;"
+                                           placeholder="0.00"
+                                           wire:model="montoAperturaForm"
                                            wire:keydown.enter="aperturarCajaDesdeModal">
                                 </div>
-                                @error('montoAperturaForm') <small class="text-danger">{{ $message }}</small> @enderror
+                                @error('montoAperturaForm') <div class="text-danger mt-1" style="font-size:14px;">{{ $message }}</div> @enderror
                             </div>
-                            <div class="col-12 col-sm-3">
-                                <button type="button" class="btn btn-success w-100 fw-semibold"
-                                        style="font-size:12px;padding:7px 10px;"
-                                        wire:click="aperturarCajaDesdeModal"
-                                        wire:loading.attr="disabled"
-                                        wire:target="aperturarCajaDesdeModal">
-                                    <span wire:loading wire:target="aperturarCajaDesdeModal">
-                                        <i class="fa-solid fa-spinner fa-spin me-1"></i>...
-                                    </span>
-                                    <span wire:loading.remove wire:target="aperturarCajaDesdeModal">
-                                        <i class="fa-solid fa-key me-1"></i>Aperturar
-                                    </span>
-                                </button>
+
+                            <button type="button" class="btn btn-success w-100 fw-bold"
+                                    style="font-size:17px;padding:14px 20px;border-radius:10px;"
+                                    wire:click="aperturarCajaDesdeModal"
+                                    wire:loading.attr="disabled"
+                                    wire:target="aperturarCajaDesdeModal">
+                                <span wire:loading wire:target="aperturarCajaDesdeModal">
+                                    <span class="spinner-border spinner-border-sm me-2"></span>Abriendo caja...
+                                </span>
+                                <span wire:loading.remove wire:target="aperturarCajaDesdeModal">
+                                    <i class="fa-solid fa-lock-open me-2"></i>Aperturar Caja
+                                </span>
+                            </button>
+
+                            @if(session('errorCaja'))
+                            <div class="alert alert-danger mt-3 mb-0 text-center" style="font-size:14px;">
+                                <i class="fa-solid fa-circle-xmark me-1"></i>{{ session('errorCaja') }}
                             </div>
+                            @endif
+                            @if(session('successCaja'))
+                            <div class="alert alert-success mt-3 mb-0 text-center" style="font-size:14px;">
+                                <i class="fa-solid fa-circle-check me-1"></i>{{ session('successCaja') }}
+                            </div>
+                            @endif
                         </div>
-                        @if(session('errorCaja'))
-                        <div class="alert alert-danger py-1 px-2 mt-2 mb-0" style="font-size:12px;">
-                            <i class="fa-solid fa-circle-xmark me-1"></i>{{ session('errorCaja') }}
-                        </div>
-                        @endif
-                        @if(session('successCaja'))
-                        <div class="alert alert-success py-1 px-2 mt-2 mb-0" style="font-size:12px;">
-                            <i class="fa-solid fa-circle-check me-1"></i>{{ session('successCaja') }}
-                        </div>
-                        @endif
                     </div>
                     @endif
                     @else
                     @if(session('successCaja'))
-                    <div class="alert alert-success alert-dismissible py-1 px-3 mb-0" style="font-size:12px;border-radius:0;">
+                    <div class="alert alert-success alert-dismissible py-2 px-3 mb-0" style="font-size:14px;border-radius:0;">
                         <i class="fa-solid fa-circle-check me-1"></i>{{ session('successCaja') }}
-                        <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" style="padding:0.35rem;"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                     @endif
                     @endif
@@ -338,70 +342,71 @@
                     {{-- Tabla Pedidos --}}
                     @if($tabModal === 'pedidos')
                     <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle mb-0">
+                        <table class="table table-hover align-middle mb-0">
                             <thead class="table-light sticky-top">
                                 <tr>
-                                    <th class="ps-3 py-2" style="font-size:11px;">N° Pedido</th>
-                                    <th class="py-2" style="font-size:11px;">Cliente</th>
-                                    <th class="text-center py-2" style="font-size:11px;">Ítems</th>
-                                    <th class="text-end py-2" style="font-size:11px;">Total</th>
-                                    <th class="text-center py-2" style="font-size:11px;">Pago</th>
-                                    <th class="py-2" style="font-size:11px;">Fecha</th>
-                                    <th class="text-center py-2" style="font-size:11px;"></th>
+                                    <th class="ps-4 py-3" style="font-size:13px;">N° Pedido</th>
+                                    <th class="py-3" style="font-size:13px;">Cliente</th>
+                                    <th class="text-center py-3" style="font-size:13px;">Ítems</th>
+                                    <th class="text-end py-3" style="font-size:13px;">Total</th>
+                                    <th class="text-center py-3" style="font-size:13px;">Pago</th>
+                                    <th class="py-3" style="font-size:13px;">Fecha</th>
+                                    <th class="text-center py-3" style="font-size:13px;"></th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody style="font-size:15px;">
                                 @forelse($pedidos as $pedido)
                                 <tr wire:key="msp-{{ $pedido->id_pedido }}" style="cursor:default;">
-                                    <td class="ps-3 py-2">
-                                        <span class="fw-semibold text-primary" style="font-size:13px;">{{ last(explode('-', $pedido->pedido_numero)) }}</span>
+                                    <td class="ps-4 py-4">
+                                        <span class="fw-bold text-primary" style="font-size:24px;">{{ last(explode('-', $pedido->pedido_numero)) }}</span>
                                     </td>
-                                    <td class="py-2">
-                                        <div style="font-size:12px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                    <td class="py-4">
+                                        <div style="font-size:15px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                             {{ $pedido->pedido_cliente_nombre ?: '— Sin datos —' }}
                                         </div>
                                         @if($pedido->pedido_cliente_doc)
-                                        <small class="text-muted">{{ $pedido->pedido_cliente_doc }}</small>
+                                        <div class="text-muted" style="font-size:13px;">{{ $pedido->pedido_cliente_doc }}</div>
                                         @endif
                                     </td>
-                                    <td class="text-center py-2">
-                                        <span class="badge bg-secondary fw-normal">{{ $pedido->total_items }}</span>
+                                    <td class="text-center py-4">
+                                        <span class="badge bg-secondary fw-normal" style="font-size:14px;padding:6px 10px;">{{ $pedido->total_items }}</span>
                                     </td>
-                                    <td class="text-end py-2 fw-semibold text-primary" style="font-size:13px;">
+                                    <td class="text-end py-4 fw-bold text-primary" style="font-size:16px;">
                                         S/ {{ number_format($pedido->total_pedido ?? 0, 2) }}
                                     </td>
-                                    <td class="text-center py-2">
+                                    <td class="text-center py-4">
                                         @if($pedido->pedido_tipo_pago == 2)
-                                            <span class="badge" style="background:#FAEEDA;color:#633806;font-size:0.65rem;">Crédito</span>
+                                            <span class="badge" style="background:#FAEEDA;color:#633806;font-size:13px;padding:6px 12px;">Crédito</span>
                                         @else
-                                            <span class="badge" style="background:#EAF3DE;color:#3B6D11;font-size:0.65rem;">Contado</span>
+                                            <span class="badge" style="background:#EAF3DE;color:#3B6D11;font-size:13px;padding:6px 12px;">Contado</span>
                                         @endif
                                     </td>
-                                    <td class="py-2">
-                                        <small class="text-muted">{{ \Carbon\Carbon::parse($pedido->created_at)->format('d/m H:i') }}</small>
+                                    <td class="py-4" style="font-size:14px;color:#6c757d;">
+                                        {{ \Carbon\Carbon::parse($pedido->created_at)->format('d/m H:i') }}
                                     </td>
-                                    <td class="text-center py-2 pe-3">
+                                    <td class="text-center py-4 pe-4">
                                         @if($validarCaja)
                                         @can('caja_pedidos.crear')
                                         <button type="button"
-                                                class="btn btn-success btn-sm fw-semibold px-3"
+                                                class="btn fw-bold px-4"
+                                                style="font-size:15px;padding-top:10px;padding-bottom:10px;background:#166534;color:#fff;border:none;border-radius:8px;"
                                                 wire:click="seleccionarPedido({{ $pedido->id_pedido }})"
                                                 wire:loading.attr="disabled"
                                                 wire:target="seleccionarPedido({{ $pedido->id_pedido }})">
                                             <span wire:loading wire:target="seleccionarPedido({{ $pedido->id_pedido }})"><span class="spinner-border spinner-border-sm"></span></span>
-                                            <span wire:loading.remove wire:target="seleccionarPedido({{ $pedido->id_pedido }})"><i class="fa-solid fa-cash-register me-1"></i>Cobrar</span>
+                                            <span wire:loading.remove wire:target="seleccionarPedido({{ $pedido->id_pedido }})"><i class="fa-solid fa-hand-holding-dollar me-2"></i>Cobrar</span>
                                         </button>
                                         @endcan
                                         @else
-                                        <span class="badge bg-warning text-dark" style="font-size:0.65rem;">Caja cerrada</span>
+                                        <span class="badge bg-warning text-dark" style="font-size:13px;padding:7px 12px;">Caja cerrada</span>
                                         @endif
                                     </td>
                                 </tr>
                                 @empty
                                 <tr>
                                     <td colspan="7" class="text-center text-muted py-5">
-                                        <i class="fa-solid fa-inbox fa-2x d-block mb-2 opacity-25"></i>
-                                        <small>No hay pedidos pendientes de cobro.</small>
+                                        <i class="fa-solid fa-inbox fa-2x d-block mb-3 opacity-25"></i>
+                                        <span style="font-size:15px;">No hay pedidos pendientes de cobro.</span>
                                     </td>
                                 </tr>
                                 @endforelse
@@ -413,64 +418,65 @@
                     {{-- Tabla Proformas --}}
                     @if($tabModal === 'proformas')
                     <div class="table-responsive">
-                        <table class="table table-hover table-sm align-middle mb-0">
+                        <table class="table table-hover align-middle mb-0">
                             <thead class="table-light sticky-top">
                                 <tr>
-                                    <th class="ps-3 py-2" style="font-size:11px;">N° Proforma</th>
-                                    <th class="py-2" style="font-size:11px;">Cliente</th>
-                                    <th class="text-center py-2" style="font-size:11px;">Ítems</th>
-                                    <th class="text-end py-2" style="font-size:11px;">Total</th>
-                                    <th class="py-2" style="font-size:11px;">Fecha</th>
-                                    <th class="text-center py-2" style="font-size:11px;"></th>
+                                    <th class="ps-4 py-3" style="font-size:13px;">N° Proforma</th>
+                                    <th class="py-3" style="font-size:13px;">Cliente</th>
+                                    <th class="text-center py-3" style="font-size:13px;">Ítems</th>
+                                    <th class="text-end py-3" style="font-size:13px;">Total</th>
+                                    <th class="py-3" style="font-size:13px;">Fecha</th>
+                                    <th class="text-center py-3" style="font-size:13px;"></th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody style="font-size:15px;">
                                 @forelse($proformas as $proforma)
                                 <tr wire:key="mspf-{{ $proforma->id_profo }}">
-                                    <td class="ps-3 py-2">
-                                        <span class="fw-semibold" style="color:#198754;font-size:13px;">
+                                    <td class="ps-4 py-4">
+                                        <span class="fw-bold" style="color:#198754;font-size:16px;">
                                             {{ $proforma->profo_serie }}-{{ str_pad($proforma->profo_correlativo, 6, '0', STR_PAD_LEFT) }}
                                         </span>
                                     </td>
-                                    <td class="py-2">
-                                        <div style="font-size:12px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                    <td class="py-4">
+                                        <div style="font-size:15px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                             {{ $proforma->cliente_razonsocial ?: $proforma->cliente_nombre }}
                                         </div>
                                         @if($proforma->cliente_numero)
-                                        <small class="text-muted">{{ $proforma->cliente_numero }}</small>
+                                        <div class="text-muted" style="font-size:13px;">{{ $proforma->cliente_numero }}</div>
                                         @endif
                                     </td>
-                                    <td class="text-center py-2">
-                                        <span class="badge bg-secondary fw-normal">{{ $proforma->total_items }}</span>
+                                    <td class="text-center py-4">
+                                        <span class="badge bg-secondary fw-normal" style="font-size:14px;padding:6px 10px;">{{ $proforma->total_items }}</span>
                                     </td>
-                                    <td class="text-end py-2 fw-semibold" style="color:#198754;font-size:13px;">
+                                    <td class="text-end py-4 fw-bold" style="color:#198754;font-size:16px;">
                                         S/ {{ number_format($proforma->total_proforma ?? 0, 2) }}
                                     </td>
-                                    <td class="py-2">
-                                        <small class="text-muted">{{ \Carbon\Carbon::parse($proforma->created_at)->format('d/m H:i') }}</small>
+                                    <td class="py-4" style="font-size:14px;color:#6c757d;">
+                                        {{ \Carbon\Carbon::parse($proforma->created_at)->format('d/m H:i') }}
                                     </td>
-                                    <td class="text-center py-2 pe-3">
+                                    <td class="text-center py-4 pe-4">
                                         @if($validarCaja)
                                         @can('caja_pedidos.crear')
                                         <button type="button"
-                                                class="btn btn-success btn-sm fw-semibold px-3"
+                                                class="btn fw-bold px-4"
+                                                style="font-size:15px;padding-top:10px;padding-bottom:10px;background:#166534;color:#fff;border:none;border-radius:8px;"
                                                 wire:click="seleccionarProforma({{ $proforma->id_profo }})"
                                                 wire:loading.attr="disabled"
                                                 wire:target="seleccionarProforma({{ $proforma->id_profo }})">
                                             <span wire:loading wire:target="seleccionarProforma({{ $proforma->id_profo }})"><span class="spinner-border spinner-border-sm"></span></span>
-                                            <span wire:loading.remove wire:target="seleccionarProforma({{ $proforma->id_profo }})"><i class="fa-solid fa-cash-register me-1"></i>Cobrar</span>
+                                            <span wire:loading.remove wire:target="seleccionarProforma({{ $proforma->id_profo }})"><i class="fa-solid fa-hand-holding-dollar me-2"></i>Cobrar</span>
                                         </button>
                                         @endcan
                                         @else
-                                        <span class="badge bg-warning text-dark" style="font-size:0.65rem;">Caja cerrada</span>
+                                        <span class="badge bg-warning text-dark" style="font-size:13px;padding:7px 12px;">Caja cerrada</span>
                                         @endif
                                     </td>
                                 </tr>
                                 @empty
                                 <tr>
                                     <td colspan="6" class="text-center text-muted py-5">
-                                        <i class="fa-solid fa-file-contract fa-2x d-block mb-2 opacity-25"></i>
-                                        <small>No hay proformas pendientes de cobro.</small>
+                                        <i class="fa-solid fa-file-contract fa-2x d-block mb-3 opacity-25"></i>
+                                        <span style="font-size:15px;">No hay proformas pendientes de cobro.</span>
                                     </td>
                                 </tr>
                                 @endforelse
@@ -497,40 +503,57 @@
 
                         {{-- Tabla de ventas --}}
                         <div class="table-responsive" style="max-height:380px;overflow-y:auto">
-                            <table class="table table-hover table-sm align-middle mb-0" style="font-size:.84rem">
-                                <thead class="table-light" style="position:sticky;top:0;z-index:1">
+                            <table class="table table-hover align-middle mb-0" style="font-size:15px;">
+                                <thead class="table-light" style="position:sticky;top:0;z-index:1;font-size:13px;">
                                     <tr>
-                                        <th class="ps-2">Comprobante</th>
-                                        <th>Cliente</th>
-                                        <th style="width:80px">Hora</th>
-                                        <th class="text-end" style="width:90px">Total</th>
-                                        <th style="width:60px"></th>
+                                        <th class="ps-3 py-3">Comprobante</th>
+                                        <th class="py-3">Cliente</th>
+                                        <th class="text-end py-3" style="width:130px">Total</th>
+                                        <th class="py-3" style="width:60px"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse($ventasResumen as $vr)
                                     <tr>
-                                        <td class="ps-2">
-                                            <span class="fw-semibold">{{ $vr->venta_serie }}-{{ str_pad($vr->venta_correlativo, 8, '0', STR_PAD_LEFT) }}</span>
-                                            <span class="badge ms-1 {{ $vr->venta_tipo === '01' ? 'bg-success' : ($vr->venta_tipo === '20' ? 'bg-secondary' : 'bg-info text-dark') }}" style="font-size:.65rem">
-                                                {{ $vr->venta_tipo === '01' ? 'F' : ($vr->venta_tipo === '20' ? 'NV' : 'B') }}
-                                            </span>
+                                        <td class="ps-3 py-3">
+                                            <span class="fw-bold">{{ $vr->venta_serie }}-{{ (int) $vr->venta_correlativo }}</span>
                                         </td>
-                                        <td>
-                                            <div class="text-truncate" style="max-width:160px" title="{{ $vr->cliente_nombre }}">{{ $vr->cliente_nombre }}</div>
+                                        <td class="py-3">
+                                            <div class="text-truncate fw-semibold" style="max-width:180px" title="{{ $vr->cliente_nombre }}">{{ $vr->cliente_nombre }}</div>
                                             @if($vr->cliente_doc)
-                                            <small class="text-muted">{{ $vr->cliente_doc }}</small>
+                                            <div class="text-muted" style="font-size:13px;">{{ $vr->cliente_doc }}</div>
                                             @endif
                                         </td>
-                                        <td class="text-muted small">{{ \Carbon\Carbon::parse($vr->created_at)->format('H:i') }}</td>
-                                        <td class="text-end fw-bold text-primary">S/ {{ number_format((float)$vr->venta_total, 2) }}</td>
-                                        <td class="text-center">
-                                            <a href="{{ route('Gestionventas.imprimir_ticketera_venta') }}?venta_id={{ $vr->id_venta }}"
-                                               target="_blank"
-                                               class="btn btn-outline-secondary btn-sm"
-                                               title="Reimprimir comprobante">
-                                                <i class="fa-solid fa-print"></i>
-                                            </a>
+                                        <td class="text-end py-3 fw-bold text-primary" style="font-size:18px;white-space:nowrap;">S/ {{ number_format((float)$vr->venta_total, 2) }}</td>
+                                        <td class="text-center py-3">
+                                            <div class="d-flex gap-2 justify-content-center">
+                                                <button type="button"
+                                                        class="btn btn-outline-secondary"
+                                                        title="Reimprimir comprobante"
+                                                        wire:click="reimprimir({{ $vr->id_venta }})"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="reimprimir({{ $vr->id_venta }})">
+                                                    <span wire:loading wire:target="reimprimir({{ $vr->id_venta }})">
+                                                        <span class="spinner-border spinner-border-sm"></span>
+                                                    </span>
+                                                    <span wire:loading.remove wire:target="reimprimir({{ $vr->id_venta }})">
+                                                        <i class="fa-solid fa-print"></i>
+                                                    </span>
+                                                </button>
+                                                <button type="button"
+                                                        class="btn btn-outline-warning"
+                                                        title="Rectificar datos"
+                                                        wire:click="abrirRectificar({{ $vr->id_venta }})"
+                                                        wire:loading.attr="disabled"
+                                                        wire:target="abrirRectificar({{ $vr->id_venta }})">
+                                                    <span wire:loading wire:target="abrirRectificar({{ $vr->id_venta }})">
+                                                        <span class="spinner-border spinner-border-sm"></span>
+                                                    </span>
+                                                    <span wire:loading.remove wire:target="abrirRectificar({{ $vr->id_venta }})">
+                                                        <i class="fa-solid fa-pen"></i>
+                                                    </span>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                     @empty
@@ -620,6 +643,7 @@
                     @endif
 
                 </div>{{-- /modal-body --}}
+                </div>{{-- /wrapper relativo --}}
             </div>
         </div>
     </div>
@@ -771,7 +795,7 @@
 
             {{-- ── CLIENTE + COMPROBANTE (compact) ── --}}
             <div class="rv-card">
-                <div class="rv-ch">
+                <div class="rv-ch" style="padding:6px 16px;">
                     <div class="d-flex align-items-center gap-2">
                         <div class="rv-ic" style="background:#E6F1FB;">
                             <i class="fa-solid fa-user" style="color:#185FA5;font-size:12px;"></i>
@@ -786,30 +810,27 @@
                         </span>
                     </div>
                 </div>
-                <div class="rv-cb" style="padding:10px 16px;">
+                <div class="rv-cb" style="padding:7px 16px;">
                     @php
                         $serieActual = '';
                         foreach($series as $s) {
                             if ($s->id_serie == $idSerie) { $serieActual = $s->serie; break; }
                         }
                     @endphp
-                    {{-- Tipo doc + Número --}}
-                    <div class="d-flex align-items-baseline gap-2 mb-1">
+                    {{-- Tipo doc + Número + Nombre en la misma línea --}}
+                    <div class="d-flex align-items-baseline gap-2 mb-0" style="flex-wrap:wrap;">
                         <span style="font-size:12px;color:#6c757d;font-weight:600;flex-shrink:0;">
                             {{ $idTipoDocumento == '4' ? 'RUC' : 'DNI' }}
                         </span>
-                        <span style="font-size:19px;font-weight:700;color:#185FA5;letter-spacing:.04em;">
+                        <span style="font-size:19px;font-weight:700;color:#185FA5;letter-spacing:.04em;line-height:1.1;flex-shrink:0;">
                             {{ $numDocumento ?: '—' }}
                         </span>
-                    </div>
-                    {{-- Nombre / Razón social --}}
-                    <div class="mb-2" style="line-height:1.2;">
-                        <span style="font-size:17px;font-weight:600;color:#212529;">
+                        <span style="font-size:17px;font-weight:600;color:#212529;line-height:1.1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                             {{ $nombreCliente ?: 'Cliente genérico' }}
                         </span>
                     </div>
                     {{-- Serie-Correlativo + IGV --}}
-                    <div class="d-flex align-items-center gap-2" style="border-top:1px solid #f0f0f0;padding-top:8px;">
+                    <div class="d-flex align-items-center gap-2" style="border-top:1px solid #f0f0f0;margin-top:5px;padding-top:5px;">
                         @if($serieActual)
                             <span style="font-size:18px;font-weight:700;color:#3B6D11;">
                                 {{ $serieActual }}-{{ $correlativo }}
@@ -833,30 +854,20 @@
                                style="color:{{ $esGratuita ? '#856404' : '#854F0B' }};font-size:12px;"></i>
                         </div>
                         <span class="rv-lbl">Pago</span>
-                        @if($esGratuita)
-                            <span class="rv-badge ms-1" style="background:#FFF3CD;color:#664d03;border:1px solid #FFC107;">
-                                <i class="fa-solid fa-hand-holding-heart" style="font-size:9px;margin-right:3px;"></i>Gratuita
-                            </span>
-                        @endif
+                    </div>
+                    {{-- Toggle gratuita en el header --}}
+                    <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                        <input class="form-check-input" type="checkbox" role="switch"
+                               id="switchGratuita" style="width:2.2em;height:1.15em;cursor:pointer;"
+                               wire:model.live="esGratuita">
+                        <label class="form-check-label d-flex align-items-center gap-1 fw-semibold"
+                               for="switchGratuita" style="font-size:12px;cursor:pointer;color:{{ $esGratuita ? '#856404' : '#6c757d' }};">
+                            <i class="fa-solid fa-hand-holding-heart" style="font-size:11px;"></i>
+                            Gratuita
+                        </label>
                     </div>
                 </div>
                 <div class="rv-cb">
-
-                    {{-- Toggle Transferencia a título gratuito --}}
-                    <div class="mb-3 p-2 rounded-2"
-                         style="{{ $esGratuita ? 'background:#FFF3CD;border:1px solid #FFC107;' : 'background:#f8f9fa;border:1px solid #dee2e6;' }}">
-                        <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
-                            <input class="form-check-input" type="checkbox" role="switch"
-                                   id="switchGratuita" style="width:2.4em;height:1.25em;cursor:pointer;"
-                                   wire:model.live="esGratuita">
-                            <label class="form-check-label d-flex align-items-center gap-1 fw-semibold"
-                                   for="switchGratuita" style="font-size:14px;cursor:pointer;">
-                                <i class="fa-solid fa-hand-holding-heart" style="color:#856404;font-size:13px;"></i>
-                                Transferencia a título gratuito
-                                <span class="text-muted fw-normal">(donación — importe total: <strong>S/ 0.00</strong>)</span>
-                            </label>
-                        </div>
-                    </div>
 
                     <div class="row g-2 align-items-start">
                         {{-- Contado / Crédito (deshabilitado en modo gratuita) --}}
@@ -898,29 +909,36 @@
                                 <label class="rv-fl" style="font-size:13px;">Medios de pago</label>
 
                                 @foreach($pagos as $i => $pago)
-                                @php
-                                    $idPagoActual = (int)($pago['id_tipo_pago'] ?? 0);
-                                    $esTarjeta    = false;
-                                    foreach ($tiposPago as $t) {
-                                        $tid = (int)($t->id_tipo_pago ?? $t['id_tipo_pago'] ?? 0);
-                                        if ($tid === $idPagoActual) {
-                                            $esTarjeta = str_contains(strtoupper((string)($t->tipo_pago_nombre ?? $t['tipo_pago_nombre'] ?? '')), 'TARJETA');
-                                            break;
-                                        }
-                                    }
-                                @endphp
                                 <div class="mb-2" wire:key="pago-line-{{ $i }}">
                                     <div class="d-flex align-items-center gap-2">
 
                                         {{-- Select medio de pago --}}
                                         <select class="rv-select flex-grow-1" style="font-size:15px;"
                                                 wire:change="cambiarTipoPago({{ $i }}, $event.target.value)">
+                                            @php
+                                                $tpTarjeta = null;
+                                            @endphp
+                                            {{-- Primero los no-tarjeta --}}
                                             @foreach($tiposPago as $tp)
+                                            @php $esTpTarjeta = str_contains(strtoupper((string)($tp->tipo_pago_nombre ?? $tp['tipo_pago_nombre'] ?? '')), 'TARJETA'); @endphp
+                                            @if($esTpTarjeta)
+                                                @php if (!$tpTarjeta) $tpTarjeta = $tp; @endphp
+                                            @else
                                             <option value="{{ $tp->id_tipo_pago }}"
-                                                    {{ ($pago['id_tipo_pago'] ?? null) == $tp->id_tipo_pago ? 'selected' : '' }}>
+                                                    {{ (($pago['id_tipo_pago'] ?? null) == $tp->id_tipo_pago && empty($pago['marca_tarjeta'])) ? 'selected' : '' }}>
                                                 {{ $tp->tipo_pago_nombre }}
                                             </option>
+                                            @endif
                                             @endforeach
+                                            {{-- Al final las opciones de tarjeta --}}
+                                            @if($tpTarjeta)
+                                                @foreach(['Visa', 'Mastercard', 'American Express', 'UnionPay'] as $m)
+                                                <option value="{{ $tpTarjeta->id_tipo_pago }}:{{ $m }}"
+                                                        {{ (($pago['id_tipo_pago'] ?? null) == $tpTarjeta->id_tipo_pago && ($pago['marca_tarjeta'] ?? '') === $m) ? 'selected' : '' }}>
+                                                    Tarjeta - {{ $m }}
+                                                </option>
+                                                @endforeach
+                                            @endif
                                         </select>
 
                                         {{-- Monto --}}
@@ -943,21 +961,6 @@
                                         </button>
                                         @endif
                                     </div>
-
-                                    {{-- Selector de marca de tarjeta --}}
-                                    @if($esTarjeta)
-                                    <div class="d-flex gap-1 flex-wrap mt-1 ps-1">
-                                        @foreach(['Visa', 'Mastercard', 'American Express', 'UnionPay'] as $marca)
-                                        @php $seleccionada = ($pago['marca_tarjeta'] ?? '') === $marca; @endphp
-                                        <button type="button"
-                                                class="btn btn-sm {{ $seleccionada ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                                style="font-size:.85rem;padding:3px 12px;border-radius:20px;"
-                                                wire:click="cambiarMarcaTarjeta({{ $i }}, '{{ $marca }}')">
-                                            {{ $marca }}
-                                        </button>
-                                        @endforeach
-                                    </div>
-                                    @endif
                                 </div>
                                 @endforeach
 
@@ -1120,7 +1123,7 @@
                                 <td colspan="4" class="rv-td text-end fw-bold" style="font-size:16px;color:#6c757d;padding:14px 14px;">
                                     Total a pagar:
                                 </td>
-                                <td class="rv-td text-end fw-bold" style="font-size:22px;color:#A32D2D;padding:14px 14px;">
+                                <td class="rv-td text-end fw-bold" style="font-size:22px;color:#A32D2D;padding:14px 14px;white-space:nowrap;">
                                     S/ {{ number_format($totalFila, 2) }}
                                 </td>
                             </tr>
@@ -1316,13 +1319,118 @@
     @endif {{-- /despachar --}}
 
     {{-- ══════════════════════════════════════════════════════
-         BOTÓN FLOTANTE — Reabrir modal de selección (visible al cerrar)
-    ═══════════════════════════════════════════════════════════ --}}
-    <button type="button" id="btn-reabrir-seleccion"
-            class="btn btn-success shadow rounded-pill d-none"
-            style="position:fixed;bottom:24px;right:24px;z-index:1040;padding:11px 20px;font-weight:700;font-size:14px;">
-        <i class="fa-solid fa-cash-register me-2"></i>Pedidos / Proformas
-    </button>
+         MODAL — Rectifica Datos de Comprobante
+    ══════════════════════════════════════════════════════════ --}}
+    <div class="modal fade" id="modalRectificarComprobante" wire:ignore.self tabindex="-1" aria-hidden="true"
+         data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:520px;">
+            <div class="modal-content border-0 shadow-lg">
+
+                <div class="modal-header border-bottom px-4 py-3">
+                    <h5 class="modal-title fw-bold mb-0" style="font-size:16px;">
+                        <i class="fa-solid fa-pen-to-square me-2 text-warning"></i>Rectifica Datos de Comprobante
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body px-4 py-3">
+
+                    {{-- Vendedor · Cobrador · Forma de pago en una fila --}}
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <label class="form-label fw-semibold mb-1" style="font-size:12px;">Vendedor</label>
+                            <select class="form-select form-select-sm" style="font-size:13px;" wire:model="rectVendedor">
+                                @foreach($rectUsuariosVendedor as $u)
+                                <option value="{{ $u->id_users }}">{{ $u->nombre_users }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label fw-semibold mb-1" style="font-size:12px;">Cobrador</label>
+                            <select class="form-select form-select-sm" style="font-size:13px;" wire:model="rectCobrador">
+                                @foreach($rectUsuariosCobrador as $u)
+                                <option value="{{ $u->id_users }}">{{ $u->nombre_users }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label fw-semibold mb-1" style="font-size:12px;">Forma de pago</label>
+                            <select class="form-select form-select-sm" style="font-size:13px;" wire:model.live="rectFormasPago">
+                                <option value="1">Contado</option>
+                                <option value="2">Crédito</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    @if((int)$rectFormasPago !== 2)
+                    <hr class="my-2">
+
+                    {{-- Medios de pago --}}
+                    <div class="fw-semibold mb-2" style="font-size:13px;color:#6c757d;text-transform:uppercase;letter-spacing:.04em;">Medios de pago</div>
+                    @foreach($rectMedios as $idx => $medio)
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <label class="mb-0 flex-grow-1" style="font-size:14px;">{{ $medio['label'] }}</label>
+                        <div class="input-group input-group-sm" style="max-width:140px;">
+                            <span class="input-group-text" style="font-size:13px;background:#f8f9fa;">S/</span>
+                            <input type="text" inputmode="decimal"
+                                   class="form-control text-end"
+                                   style="font-size:15px;font-weight:600;"
+                                   data-rect-monto="{{ $idx }}"
+                                   wire:model.live="rectMedios.{{ $idx }}.monto">
+                        </div>
+                    </div>
+                    @endforeach
+                    @endif
+
+                    <div id="rectificar-alerta" class="alert alert-danger py-2 mt-2 mb-0" style="font-size:14px;display:none;"></div>
+
+                </div>
+
+                {{-- Totales --}}
+                @if((int)$rectFormasPago !== 2)
+                @php
+                    $rectSumaMedios = collect($rectMedios)->sum(fn($m) => (float) str_replace(',', '.', $m['monto'] ?? '0'));
+                    $rectDiff = round($rectSumaMedios, 2) - round($rectTotalVenta, 2);
+                @endphp
+                <div class="d-flex border-top border-bottom px-4 py-2" style="background:#f8f9fa;">
+                    <div class="flex-fill text-center border-end pe-3">
+                        <div style="font-size:12px;color:#6c757d;text-transform:uppercase;letter-spacing:.04em;">Total Comprobante</div>
+                        <div style="font-size:22px;font-weight:700;color:#1a1a1a;">S/ {{ number_format($rectTotalVenta, 2) }}</div>
+                    </div>
+                    <div class="flex-fill text-center ps-3">
+                        <div style="font-size:12px;color:#6c757d;text-transform:uppercase;letter-spacing:.04em;">Total Ingresado</div>
+                        <div style="font-size:22px;font-weight:700;color:{{ $rectDiff == 0 ? '#166534' : '#dc3545' }};">
+                            S/ {{ number_format($rectSumaMedios, 2) }}
+                        </div>
+                        @if($rectDiff != 0)
+                        <div style="font-size:12px;color:#dc3545;">
+                            {{ $rectDiff > 0 ? '+' : '' }}{{ number_format($rectDiff, 2) }}
+                        </div>
+                        @endif
+                    </div>
+                </div>
+                @endif
+
+                <div class="modal-footer px-4 py-3 border-top">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="font-size:15px;">
+                        Cancelar
+                    </button>
+                    <button type="button" class="btn btn-warning fw-bold px-4" style="font-size:15px;"
+                            wire:click="guardarRectificar"
+                            wire:loading.attr="disabled" wire:target="guardarRectificar">
+                        <span wire:loading wire:target="guardarRectificar">
+                            <span class="spinner-border spinner-border-sm me-1"></span>Guardando...
+                        </span>
+                        <span wire:loading.remove wire:target="guardarRectificar">
+                            <i class="fa-solid fa-floppy-disk me-2"></i>Guardar
+                            <span class="badge bg-warning text-dark ms-2" style="font-size:11px;font-weight:600;">F2</span>
+                        </span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
 
 </div>
 
@@ -1330,18 +1438,12 @@
 <script>
     const modalSeleccion   = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalSeleccionarPedido'));
     const modalDetalleCaja = document.getElementById('modalDetalleCaja');
-    const fabReabrir       = document.getElementById('btn-reabrir-seleccion');
-
-    // Botón flotante: reabrir el modal de selección
-    if (fabReabrir) {
-        fabReabrir.addEventListener('click', () => abrirSeleccion());
-    }
 
     // Foco en el primer botón Cobrar dentro del modal
     const enfocarPrimerCobrar = () => {
         $nextTick(() => {
             const modal = document.getElementById('modalSeleccionarPedido');
-            const btn   = modal ? modal.querySelector('tbody button.btn-success') : null;
+            const btn   = modal ? modal.querySelector('tbody button.btn') : null;
             if (btn) {
                 btn.focus();
             }
@@ -1375,13 +1477,6 @@
     document.getElementById('modalSeleccionarPedido').addEventListener('hidden.bs.modal', () => {
         document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
         document.body.classList.remove('modal-open');
-        // Mostrar el botón flotante para reabrir el modal
-        if (fabReabrir) fabReabrir.classList.remove('d-none');
-    });
-
-    // Ocultar el botón flotante mientras el modal está abierto
-    document.getElementById('modalSeleccionarPedido').addEventListener('shown.bs.modal', () => {
-        if (fabReabrir) fabReabrir.classList.add('d-none');
     });
 
     $wire.on('abrirModalDetalleCaja', () => {
@@ -1492,5 +1587,39 @@
             }
         }
     }, true);
+
+    // Rectifica Datos de Comprobante
+    $wire.on('abrirModalRectificar', () => {
+        const alerta = document.getElementById('rectificar-alerta');
+        if (alerta) { alerta.style.display = 'none'; alerta.textContent = ''; }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRectificarComprobante')).show();
+    });
+    $wire.on('cerrarModalRectificar', () => {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRectificarComprobante')).hide();
+    });
+    $wire.on('rectificar-error', ({ mensaje }) => {
+        const alerta = document.getElementById('rectificar-alerta');
+        if (alerta) { alerta.textContent = mensaje; alerta.style.display = 'block'; }
+    });
+
+    // Navegación teclado en medios de pago del modal Rectificar
+    document.getElementById('modalRectificarComprobante').addEventListener('keydown', (e) => {
+        const input = e.target.closest('[data-rect-monto]');
+        if (!input) return;
+
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const inputs = Array.from(document.querySelectorAll('#modalRectificarComprobante [data-rect-monto]'));
+            const idx = inputs.indexOf(input);
+            const next = e.key === 'ArrowDown' ? inputs[idx + 1] : inputs[idx - 1];
+            if (next) { next.focus(); next.select(); }
+            return;
+        }
+
+        if (e.key === 'F2') {
+            e.preventDefault();
+            $wire.call('guardarRectificar');
+        }
+    });
 </script>
 @endscript

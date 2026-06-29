@@ -72,7 +72,7 @@ class LogisticaController extends Controller
     {
         try {
 //            ESTE IF ES PARA VERIFICAR SI ESE ROL TIENE EL PERMISO PARA LA VISTA
-            $opciones = $this->submenu->optiones_por_vista("compras");
+            $opciones = $this->submenu->optiones_por_vista("compras")->slice(0, 1)->values();
             return view('logistica/compras', compact('opciones'));
         } catch (\Exception $e) {
             $this->logs->insertarLog($e);

@@ -158,112 +158,12 @@
     @endif
 
     {{-- ══════════════════════════════════════════════════════════ --}}
-    {{--  FILA 1 — Caja + Alertas SUNAT                           --}}
+    {{--  FILA 1 — Alertas SUNAT                                  --}}
     {{-- ══════════════════════════════════════════════════════════ --}}
     <div class="row g-3 mb-4">
 
-        {{-- Caja del día --}}
-        <div class="col-lg-4 col-md-12">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body d-flex flex-column">
-                    <h6 class="fw-bold mb-3" style="color:#0b1892;">
-                        <i class="fa-solid fa-cash-register me-2"></i> Caja del Día
-                    </h6>
-
-                    @if($necesitaSeleccionarSucursal)
-                        {{-- Pendiente de elegir sucursal --}}
-                        <div class="text-center text-muted py-4 flex-grow-1 d-flex flex-column align-items-center justify-content-center">
-                            <i class="fa-solid fa-store fa-2x opacity-25 mb-2"></i>
-                            <p class="mb-3 small">Primero debes seleccionar en qué sede trabajarás hoy.</p>
-                            <button class="btn btn-sm fw-semibold text-white"
-                                    style="background:#0b1892;"
-                                    wire:click="$dispatch('abrirModalSucursal')">
-                                <i class="fa-solid fa-store me-1"></i> Seleccionar sede
-                            </button>
-                        </div>
-
-                    @elseif(!$apertura)
-                        {{-- Sucursal activa — formulario apertura --}}
-                        @if($sucursalNombre)
-                            <div class="mb-3">
-                                <span class="badge rounded-pill fw-normal"
-                                      style="background:#eef1ff;color:#0b1892;font-size:.72rem;">
-                                    <i class="fa-solid fa-store me-1"></i>{{ $sucursalNombre }}
-                                </span>
-                            </div>
-                        @endif
-
-                        @if($cajas->isEmpty())
-                            <div class="text-center text-muted py-3 flex-grow-1 d-flex flex-column align-items-center justify-content-center">
-                                <i class="fa-solid fa-cash-register fa-xl opacity-25 mb-2"></i>
-                                <small>No hay cajas activas en esta sede.</small>
-                            </div>
-                        @else
-                            <div class="mb-2">
-                                <label class="form-label fw-semibold text-muted small text-uppercase mb-1">Caja</label>
-                                <select wire:model="idCajaSeleccionada"
-                                        class="form-select form-select-sm @error('idCajaSeleccionada') is-invalid @enderror">
-                                    <option value="">— Seleccionar —</option>
-                                    @foreach($cajas as $c)
-                                        <option value="{{ $c->id_caja_numero }}">{{ $c->caja_numero_nombre }}</option>
-                                    @endforeach
-                                </select>
-                                @error('idCajaSeleccionada') <span class="invalid-feedback">{{ $message }}</span> @enderror
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold text-muted small text-uppercase mb-1">Monto de Apertura</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text">S/</span>
-                                    <input type="number" wire:model="montoApertura"
-                                           class="form-control @error('montoApertura') is-invalid @enderror"
-                                           placeholder="0.00" min="0" step="0.01">
-                                    @error('montoApertura') <span class="invalid-feedback">{{ $message }}</span> @enderror
-                                </div>
-                            </div>
-                            <button class="btn w-100 fw-semibold text-white mt-auto"
-                                    style="background:#0b1892;"
-                                    wire:click="aperturarCaja"
-                                    wire:loading.attr="disabled" wire:target="aperturarCaja">
-                                <span wire:loading.remove wire:target="aperturarCaja">
-                                    <i class="fa-solid fa-lock-open me-1"></i> Aperturar Caja
-                                </span>
-                                <span wire:loading wire:target="aperturarCaja">
-                                    <span class="spinner-border spinner-border-sm me-1"></span> Aperturando...
-                                </span>
-                            </button>
-                        @endif
-
-                    @else
-                        {{-- Caja abierta --}}
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <span class="badge bg-success">Abierta</span>
-                            <span class="fw-bold small">{{ $apertura->caja_numero_nombre }}</span>
-                        </div>
-                        @if($apertura->sucursal_nombre)
-                            <div class="mb-2">
-                                <span class="badge rounded-pill fw-normal"
-                                      style="background:#eef1ff;color:#0b1892;font-size:.72rem;">
-                                    <i class="fa-solid fa-store me-1"></i>{{ $apertura->sucursal_nombre }}
-                                </span>
-                            </div>
-                        @endif
-                        <div class="rounded p-2 mb-3" style="background:#f5f5f5;">
-                            <small class="text-muted d-block" style="font-size:11px;">APERTURA</small>
-                            <span class="fw-semibold small">
-                                S/ {{ number_format($apertura->caja_apertura, 2) }}
-                                — {{ \Carbon\Carbon::parse($apertura->caja_fecha_apertura)->format('H:i') }}
-                            </span>
-                        </div>
-                        <button class="btn btn-danger w-100 fw-semibold mt-auto" wire:click="abrirModalCierre">
-                            <i class="fa-solid fa-lock me-1"></i> Cerrar Caja
-                        </button>
-                    @endif
-                </div>
-            </div>
-        </div>
-
         {{-- Alertas SUNAT --}}
-        <div class="col-lg-8 col-md-12">
+        <div class="col-12">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body">
                     <div class="d-flex align-items-center justify-content-between mb-3">

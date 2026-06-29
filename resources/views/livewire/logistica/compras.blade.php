@@ -1,4 +1,11 @@
 <div>
+<style>
+    .form-control[readonly], .form-select[readonly] {
+        background-color: #eef0f2 !important;
+        color: #495057;
+        cursor: default;
+    }
+</style>
 
     {{-- Alertas --}}
     @if(session('success'))
@@ -134,6 +141,103 @@
                         </span>
                         <span wire:loading wire:target="recibirOrden">
                             <span class="spinner-border spinner-border-sm me-1"></span> Procesando...
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Modal Nuevo Proveedor --}}
+    <div class="modal fade" id="modalNuevoProveedor" wire:ignore.self tabindex="-1"
+         data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:500px;">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-bottom px-4 py-3">
+                    <h5 class="modal-title fw-bold mb-0" style="font-size:16px;">
+                        <i class="fa-solid fa-truck me-2 text-primary"></i>Nuevo Proveedor
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body px-4 py-3">
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-secondary mb-1">
+                                Nombre / Razón Social <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="form-control @error('npNombre') is-invalid @enderror"
+                                   wire:model="npNombre" placeholder="Ej. DISTRIBUIDORA SAC">
+                            @error('npNombre') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-5">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Tipo Documento</label>
+                            <select class="form-select" wire:model="npTipoDoc">
+                                <option value="4">RUC</option>
+                                <option value="2">DNI</option>
+                                <option value="5">Pasaporte</option>
+                                <option value="1">Otro</option>
+                            </select>
+                        </div>
+
+                        <div class="col-7">
+                            <label class="form-label fw-semibold small text-secondary mb-1">
+                                N° Documento <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="text" class="form-control @error('npNumDoc') is-invalid @enderror"
+                                       wire:model="npNumDoc" placeholder="Ej. 20512345678" maxlength="20">
+                                <button type="button" class="btn btn-outline-secondary px-2"
+                                        wire:click="npBuscarDoc"
+                                        wire:loading.attr="disabled" wire:target="npBuscarDoc"
+                                        title="Consultar RUC/DNI">
+                                    <span wire:loading wire:target="npBuscarDoc">
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                    </span>
+                                    <span wire:loading.remove wire:target="npBuscarDoc">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                    </span>
+                                </button>
+                            </div>
+                            @error('npNumDoc') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
+                            @if($npDocMensaje)
+                                <div class="mt-1 small {{ $npDocMensajeTipo === 'success' ? 'text-success' : 'text-danger' }}">
+                                    <i class="fa-solid {{ $npDocMensajeTipo === 'success' ? 'fa-circle-check' : 'fa-circle-xmark' }} me-1"></i>{{ $npDocMensaje }}
+                                </div>
+                            @endif
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Dirección</label>
+                            <input type="text" class="form-control" wire:model="npDireccion"
+                                   placeholder="Dirección (opcional)">
+                        </div>
+
+                        <div class="col-6">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Teléfono</label>
+                            <input type="text" class="form-control" wire:model="npTelefono"
+                                   placeholder="(opcional)">
+                        </div>
+
+                        <div class="col-6">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Correo</label>
+                            <input type="email" class="form-control" wire:model="npCorreo"
+                                   placeholder="(opcional)">
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer px-4 py-3 border-top">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary fw-bold px-4"
+                            wire:click="guardarNuevoProveedor"
+                            wire:loading.attr="disabled" wire:target="guardarNuevoProveedor">
+                        <span wire:loading wire:target="guardarNuevoProveedor">
+                            <span class="spinner-border spinner-border-sm me-1"></span>Guardando...
+                        </span>
+                        <span wire:loading.remove wire:target="guardarNuevoProveedor">
+                            <i class="fa-solid fa-floppy-disk me-2"></i>Guardar
                         </span>
                     </button>
                 </div>
@@ -438,11 +542,8 @@
     {{-- ── Barra superior ── --}}
     <div class="d-flex align-items-center justify-content-between mb-3">
         <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-sm btn-light border" wire:click="volverHistorial">
-                <i class="fa-solid fa-arrow-left me-1"></i> Historial
-            </button>
             <h5 class="mb-0 fw-bold">
-                <i class="fa-solid fa-file-invoice me-2 text-primary"></i>Nueva Compra
+                <i class="fa-solid fa-file-invoice me-2 text-primary"></i>Registro de Ingresos - Compras
             </h5>
         </div>
         <button class="btn btn-primary fw-semibold px-4"
@@ -462,153 +563,144 @@
             <h6 class="fw-bold text-muted small text-uppercase mb-3">
                 <i class="fa-solid fa-file-lines me-1"></i> Datos del Comprobante
             </h6>
-            <div class="row g-2">
-
-                {{-- Fila 1: Proveedor · RUC · Tipo Doc · N°Doc+SUNAT · Moneda · Condición --}}
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-secondary mb-1">
-                        Proveedor <span class="text-danger">*</span>
-                    </label>
-                    <select class="form-select form-select-sm @error('idProveedor') is-invalid @enderror"
-                            wire:model.live="idProveedor">
-                        <option value="0">— Seleccionar —</option>
-                        @foreach($proveedores as $prov)
-                            <option value="{{ $prov->id_proveedores }}">{{ $prov->proveedores_nombre }}</option>
-                        @endforeach
-                    </select>
-                    @error('idProveedor') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            {{-- FILA 1: Orden N° · Emisión · Almacenamiento · Comprobante · Tipo · Estado --}}
+            <div class="row g-2 mb-2">
+                <div class="col-auto" style="min-width:100px;">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Orden N°</label>
+                    <input type="text" class="form-control form-control-sm fw-semibold"
+                           value="{{ $proximoNumero }}" readonly data-compra-nav>
                 </div>
 
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">RUC Proveedor</label>
-                    <input type="text" class="form-control form-control-sm bg-light text-muted"
-                           value="{{ $this->proveedorRuc ?: '—' }}" readonly>
+                <div class="col-auto" style="min-width:140px;">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Emisión</label>
+                    <input type="date" class="form-control form-control-sm" wire:model="fechaEmision" data-compra-nav>
                 </div>
 
-                <div class="col-md-1" style="min-width:110px;">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Tipo Doc.</label>
-                    <select class="form-select form-select-sm" wire:model="tipoDoc">
-                        <option value="">— —</option>
-                        <option value="FACTURA">Factura</option>
-                        <option value="BOLETA">Boleta</option>
-                        <option value="NOTA DE VENTA">Nota de Venta</option>
-                        <option value="TICKET">Ticket</option>
-                        <option value="GUIA">Guía</option>
-                    </select>
+                <div class="col-auto" style="min-width:155px;">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Almacenamiento</label>
+                    <input type="date" class="form-control form-control-sm" wire:model="fechaAlmacenamiento" data-compra-nav>
                 </div>
 
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-secondary mb-1">N° Documento</label>
+                <div class="col">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Comprobante</label>
                     <div class="input-group input-group-sm">
-                        <input type="text" class="form-control" wire:model="numeroDoc" placeholder="Ej. F001-00001234">
-                        <button type="button" class="btn btn-outline-primary px-2"
-                                wire:click="buscarEnSunat" wire:loading.attr="disabled" wire:target="buscarEnSunat"
-                                title="Consultar SUNAT">
-                            <span wire:loading.remove wire:target="buscarEnSunat"><i class="fa-solid fa-magnifying-glass"></i></span>
-                            <span wire:loading wire:target="buscarEnSunat"><span class="spinner-border spinner-border-sm"></span></span>
-                        </button>
+                        <select class="form-select" style="max-width:115px;" wire:model="tipoDoc" data-compra-nav>
+                            <option value="">— Tipo —</option>
+                            <option value="BOLETA">Boleta</option>
+                            <option value="FACTURA">Factura</option>
+                        </select>
+                        <input type="text" class="form-control" style="max-width:80px;"
+                               wire:model="docSerie" placeholder="Serie" maxlength="10" data-compra-nav>
+                        <input type="text" class="form-control"
+                               wire:model="docCorrelativo" placeholder="Correlativo" maxlength="20" data-compra-nav>
                     </div>
-                    @if($sunatMensaje)
-                    <div class="mt-1 small {{ $sunatTipo === 'success' ? 'text-success' : ($sunatTipo === 'error' ? 'text-danger' : 'text-warning') }}">
-                        <i class="fa-solid fa-{{ $sunatTipo === 'success' ? 'circle-check' : ($sunatTipo === 'error' ? 'circle-xmark' : 'triangle-exclamation') }} me-1"></i>{{ $sunatMensaje }}
-                    </div>
-                    @endif
                 </div>
 
-                <div class="col-md-1" style="min-width:120px;">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Moneda</label>
-                    <select class="form-select form-select-sm" wire:model="moneda">
-                        <option value="PEN">S/ Soles</option>
-                        <option value="USD">$ Dólares</option>
-                        <option value="EUR">€ Euros</option>
-                    </select>
-                </div>
-
-                <div class="col-md-1" style="min-width:120px;">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Condición</label>
-                    <select class="form-select form-select-sm" wire:model.live="condicionPago">
+                <div class="col-auto" style="min-width:120px;">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Tipo</label>
+                    <select class="form-select form-select-sm" wire:model.live="condicionPago" data-compra-nav>
                         <option value="contado">Contado</option>
                         <option value="credito">Crédito</option>
                     </select>
                 </div>
 
-                @if($condicionPago === 'contado')
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Tipo de Pago</label>
-                    <select class="form-select form-select-sm" wire:model="idTipoPago">
-                        <option value="0">— Seleccionar —</option>
-                        @foreach($tiposPago as $tp)
-                            <option value="{{ $tp->id_tipo_pago }}">{{ $tp->tipo_pago_nombre }}</option>
-                        @endforeach
+                <div class="col-auto" style="min-width:140px;">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Estado</label>
+                    <select class="form-select form-select-sm" wire:model="estadoOrden" data-compra-nav>
+                        <option value="en_transito">Tránsito</option>
+                        <option value="recibido">Recepcionado</option>
                     </select>
                 </div>
-                @endif
+            </div>
 
-                {{-- Fila 2: Fechas + Guías --}}
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Fecha Emisión</label>
-                    <input type="date" class="form-control form-control-sm" wire:model="fechaEmision">
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Fecha Almacenamiento</label>
-                    <input type="date" class="form-control form-control-sm" wire:model="fechaAlmacenamiento">
-                </div>
-
-                <div class="col-md-2">
+            {{-- FILA 2: Proveedor · Razón Social · RUC · Observaciones --}}
+            <div class="row g-2 mb-2">
+                <div class="col-md-3">
                     <label class="form-label fw-semibold small text-secondary mb-1">
-                        Fecha Vencimiento @if($condicionPago === 'credito') <span class="text-danger">*</span> @endif
+                        Proveedor <span class="text-danger">*</span>
                     </label>
-                    <input type="date" class="form-control form-control-sm @error('fechaVencimiento') is-invalid @enderror" wire:model="fechaVencimiento">
-                    @error('fechaVencimiento') <div class="invalid-feedback">{{ $message }}</div> @enderror
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Guía Remitente</label>
-                    <input type="text" class="form-control form-control-sm" wire:model="guiaRemitente" placeholder="N° guía remitente">
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Guía Transportista</label>
-                    <input type="text" class="form-control form-control-sm" wire:model="guiaTransportista" placeholder="N° guía transportista">
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Adjuntar Documento</label>
-                    <input type="file" class="form-control form-control-sm" wire:model="docAdjunto" accept=".pdf,.jpg,.jpeg,.png">
-                    <span wire:loading wire:target="docAdjunto" class="spinner-border spinner-border-sm text-primary mt-1"></span>
-                </div>
-
-                {{-- Fila 3: Transportistas + Observaciones --}}
-                <div class="col-md-5">
-                    <div class="d-flex align-items-center justify-content-between mb-1">
-                        <label class="form-label fw-semibold small text-secondary mb-0">
-                            <i class="fa-solid fa-truck me-1 text-muted"></i>Transportistas
-                        </label>
-                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
-                                wire:click="agregarTransportista" style="font-size:.75rem;">
-                            <i class="fa-solid fa-plus me-1"></i>Agregar
+                    <div class="input-group input-group-sm">
+                        <select class="form-select @error('idProveedor') is-invalid @enderror"
+                                wire:model.live="idProveedor" data-compra-nav>
+                            <option value="0">— Seleccionar —</option>
+                            @foreach($proveedores as $prov)
+                                <option value="{{ $prov->id_proveedores }}">{{ $prov->proveedores_nombre }}</option>
+                            @endforeach
+                        </select>
+                        <button type="button" class="btn btn-outline-primary px-2"
+                                data-bs-toggle="modal" data-bs-target="#modalNuevoProveedor"
+                                title="Agregar proveedor">
+                            <i class="fa-solid fa-plus"></i>
                         </button>
                     </div>
-                    @foreach($transportistas as $ti => $trans)
-                    <div class="input-group input-group-sm mb-1" wire:key="trans-{{ $ti }}">
-                        <span class="input-group-text bg-light"><i class="fa-solid fa-truck text-muted" style="font-size:.7rem;"></i></span>
-                        <input type="text" wire:model="transportistas.{{ $ti }}.nombre"
-                               class="form-control" placeholder="Nombre / empresa transportista">
-                        <button type="button" class="btn btn-outline-danger" wire:click="quitarTransportista({{ $ti }})">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
-                    </div>
-                    @endforeach
+                    @error('idProveedor') <div class="invalid-feedback d-block">{{ $message }}</div> @enderror
                 </div>
 
-                <div class="col-md-7">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Razón Social</label>
+                    <input type="text" class="form-control form-control-sm text-muted"
+                           value="{{ $proveedorRazonSocial ?: '—' }}" readonly data-compra-nav>
+                </div>
+
+                <div class="col-md-1" style="min-width:130px;">
+                    <label class="form-label fw-semibold small text-secondary mb-1">RUC</label>
+                    <input type="text" class="form-control form-control-sm text-muted"
+                           value="{{ $proveedorRuc ?: '—' }}" readonly data-compra-nav>
+                </div>
+
+                <div class="col">
                     <label class="form-label fw-semibold small text-secondary mb-1">Observaciones</label>
                     <textarea class="form-control form-control-sm" wire:model="observacion"
-                              rows="2" placeholder="Notas adicionales..."></textarea>
+                              rows="1" placeholder="Notas adicionales..." style="resize:none;" data-compra-nav></textarea>
+                </div>
+            </div>
+
+            {{-- FILA 3: Transportista 1 --}}
+            <div class="row g-2 mb-2">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Transportista</label>
+                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
                 </div>
 
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold small text-secondary mb-1">RUC Transportista</label>
+                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small text-secondary mb-1">N° Fact.</label>
+                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Fecha</label>
+                    <input type="date" class="form-control form-control-sm" readonly data-compra-nav>
+                </div>
             </div>
+
+            {{-- FILA 4: Transportista 2 --}}
+            <div class="row g-2 mb-2">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Transportista</label>
+                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold small text-secondary mb-1">RUC Transportista</label>
+                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small text-secondary mb-1">N° Fact.</label>
+                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold small text-secondary mb-1">Fecha</label>
+                    <input type="date" class="form-control form-control-sm" readonly data-compra-nav>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -669,15 +761,16 @@
                 <table class="table table-sm align-middle mb-0" style="font-size:.82rem;min-width:880px;">
                     <thead>
                         <tr class="table-light">
-                            <th>#</th>
+                            <th style="width:32px;">#</th>
+                            <th style="width:100px;">Código</th>
                             <th>Producto</th>
-                            <th style="width:105px;">Presentación</th>
-                            <th class="text-center" style="width:72px;">C×Unid</th>
-                            <th class="text-center" style="width:85px;">Cantidad</th>
-                            <th style="width:120px;">Costo Unit.</th>
-                            <th class="text-end" style="width:72px;">IGV {{ $this->igvPorcentaje > 0 ? $this->igvPorcentaje.'%' : '' }}</th>
-                            <th class="text-end" style="width:72px;">Flete</th>
-                            <th class="text-end" style="width:85px;">Total</th>
+                            <th style="width:110px;">Presentación</th>
+                            <th class="text-center" style="width:88px;">Cantidad</th>
+                            <th class="text-center" style="width:110px;">Cant × Unid<br><small class="fw-normal text-muted" style="font-size:.72rem;">(Almacén)</small></th>
+                            <th style="width:130px;">Costo Unit. S/</th>
+                            <th class="text-end" style="width:85px;">Total S/</th>
+                            <th class="text-end" style="width:72px;">Flete S/</th>
+                            <th class="text-end" style="width:72px;">IGV S/ {{ $this->igvPorcentaje > 0 ? $this->igvPorcentaje.'%' : '' }}</th>
                             <th style="width:36px;"></th>
                         </tr>
                     </thead>
@@ -691,9 +784,9 @@
                         @endphp
                         <tr wire:key="item-{{ $i }}">
                             <td class="text-muted small ps-1">{{ $i + 1 }}</td>
+                            <td class="text-muted small">{{ $item['codigo'] }}</td>
                             <td>
                                 <span class="fw-semibold d-block lh-sm">{{ $item['nombre'] }}</span>
-                                <small class="text-muted">{{ $item['codigo'] }}</small>
                             </td>
                             <td>
                                 @if(!empty($item['presentacion']))
@@ -704,18 +797,18 @@
                                     <span class="text-muted small">—</span>
                                 @endif
                             </td>
+                            <td>
+                                <input type="text" inputmode="decimal"
+                                       class="form-control form-control-sm text-center @error("items.{$i}.cantidad") is-invalid @enderror"
+                                       wire:model.live="items.{{ $i }}.cantidad">
+                                @error("items.{$i}.cantidad") <div class="invalid-feedback" style="font-size:.7rem;">{{ $message }}</div> @enderror
+                            </td>
                             <td class="text-center">
                                 @if(!empty($item['cantidad_x_unidad']))
                                     <span class="fw-semibold small">{{ $item['cantidad_x_unidad'] }}</span>
                                 @else
                                     <span class="text-muted small">—</span>
                                 @endif
-                            </td>
-                            <td>
-                                <input type="text" inputmode="decimal"
-                                       class="form-control form-control-sm text-center @error("items.{$i}.cantidad") is-invalid @enderror"
-                                       wire:model.live="items.{{ $i }}.cantidad">
-                                @error("items.{$i}.cantidad") <div class="invalid-feedback" style="font-size:.7rem;">{{ $message }}</div> @enderror
                             </td>
                             <td>
                                 <div class="input-group input-group-sm">
@@ -726,9 +819,9 @@
                                 </div>
                                 @error("items.{$i}.precio_compra") <div class="invalid-feedback" style="font-size:.7rem;">{{ $message }}</div> @enderror
                             </td>
-                            <td class="text-end text-muted small">{{ $igvItem > 0 ? number_format($igvItem, 2) : '—' }}</td>
-                            <td class="text-end text-muted small">{{ $fleteItem > 0 ? number_format($fleteItem, 2) : '—' }}</td>
                             <td class="text-end fw-semibold">{{ number_format($item['total'], 2) }}</td>
+                            <td class="text-end text-muted small">0.00</td>
+                            <td class="text-end text-muted small">0.00</td>
                             <td class="text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1"
                                         wire:click="quitarItem({{ $i }})" title="Quitar">
@@ -749,113 +842,104 @@
         </div>
     </div>
 
-    {{-- ══ BLOQUE 3 — Acciones + Totales (ancho completo) ══ --}}
-    <div class="card border-0 shadow-sm mb-3">
+    {{-- ══ BLOQUE 3 — Totales ══ --}}
+    <div class="row mb-3">
+        <div class="col-md-6 ms-auto">
+    <div class="card border-0 shadow-sm">
         <div class="card-body">
-            <div class="row g-3 align-items-start">
 
-                {{-- Columna izquierda: botones de acción --}}
-                <div class="col-md-6 d-flex flex-column gap-2 justify-content-start pt-1">
-                    <button class="btn btn-light border" wire:click="volverHistorial">
-                        <i class="fa-solid fa-xmark me-1"></i> Cancelar
-                    </button>
-                </div>
-
-                {{-- Columna derecha: desglose de totales --}}
-                <div class="col-md-6">
+                {{-- Columna de totales --}}
+                <div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="chkRevertirIgv"
+                               @checked($revertirDesagregarIgv)
+                               wire:click="toggleRevertirIgv">
+                        <label class="form-check-label small fw-semibold" for="chkRevertirIgv">
+                            Revertir Desagregar IGV de Pro
+                        </label>
+                    </div>
                     <div class="rounded-2 border p-3" style="background:#f8f9fb;">
+                        @php $subtotalConIgv = round($subtotalNeto + $igvMonto, 2); @endphp
 
-                        {{-- Subtotal --}}
-                        <div class="d-flex justify-content-between align-items-center pb-2 mb-1 border-bottom">
-                            <span class="text-muted small">Subtotal <span class="badge bg-secondary ms-1">{{ count($items) }} ítem(s)</span></span>
-                            <span class="fw-semibold">{{ $sym }} {{ number_format($subtotal, 2) }}</span>
+                        {{-- Subtotal S/ --}}
+                        <div class="d-flex justify-content-between align-items-center py-1">
+                            <span class="text-muted small">Subtotal S/</span>
+                            <input type="text" class="form-control form-control-sm text-end"
+                                   value="{{ number_format($subtotal, 2) }}" readonly style="max-width:130px;">
                         </div>
 
-                        {{-- Descuento --}}
+                        {{-- Dscto S/ --}}
                         <div class="d-flex justify-content-between align-items-center py-1">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="text-muted small" style="min-width:90px;">Descuento</span>
-                                <div class="input-group input-group-sm" style="width:90px;">
-                                    <input type="number" class="form-control text-center" wire:model.live="descuentoPorcentaje"
-                                           min="0" max="100" step="0.01" placeholder="0">
+                            <span class="text-muted small">Dscto S/</span>
+                            <input type="text" inputmode="decimal" class="form-control form-control-sm text-end"
+                                   wire:model.live="descuentoImporte" placeholder="0.00" style="max-width:130px;">
+                        </div>
+
+                        {{-- SubTot S/ (subtotal − descuento) --}}
+                        <div class="d-flex justify-content-between align-items-center py-1 border-bottom pb-2 mb-1">
+                            <span class="text-muted small fw-semibold">SubTot S/</span>
+                            <input type="text" class="form-control form-control-sm text-end fw-semibold"
+                                   value="{{ number_format($subtotalNeto, 2) }}" readonly style="max-width:130px;">
+                        </div>
+
+                        {{-- IGV % + monto S/ --}}
+                        <div class="d-flex justify-content-between align-items-center py-1">
+                            <span class="text-muted small">IGV %</span>
+                            <div class="d-flex gap-1 align-items-center">
+                                <div class="input-group input-group-sm" style="width:82px;">
+                                    <input type="text" inputmode="decimal" class="form-control text-center"
+                                           wire:model.live="igvPorcentaje" placeholder="0">
                                     <span class="input-group-text bg-white px-1">%</span>
                                 </div>
+                                <input type="text" class="form-control form-control-sm text-end"
+                                       value="{{ number_format($igvMonto, 2) }}" readonly style="width:100px;">
                             </div>
-                            <span class="small fw-semibold {{ $descuentoMonto > 0 ? 'text-danger' : 'text-muted' }}">
-                                {{ $descuentoMonto > 0 ? '-'.$sym.' '.number_format($descuentoMonto,2) : '—' }}
-                            </span>
                         </div>
 
-                        @if($descuentoMonto > 0)
-                        <div class="d-flex justify-content-between align-items-center py-1 border-top border-bottom">
-                            <span class="text-muted small">Subtotal c/Dscto.</span>
-                            <span class="fw-semibold">{{ $sym }} {{ number_format($subtotalNeto, 2) }}</span>
+                        {{-- SubTot S/ (con IGV) --}}
+                        <div class="d-flex justify-content-between align-items-center py-1 border-bottom pb-2 mb-1">
+                            <span class="text-muted small fw-semibold">SubTot S/</span>
+                            <input type="text" class="form-control form-control-sm text-end fw-semibold"
+                                   value="{{ number_format($subtotalConIgv, 2) }}" readonly style="max-width:130px;">
                         </div>
-                        @endif
 
-                        {{-- IGV --}}
+                        {{-- Percep IGV % + monto S/ --}}
                         <div class="d-flex justify-content-between align-items-center py-1">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="text-muted small" style="min-width:90px;">IGV</span>
-                                <div class="input-group input-group-sm" style="width:90px;">
-                                    <input type="number" class="form-control text-center" wire:model.live="igvPorcentaje"
-                                           min="0" max="100" step="0.01" placeholder="0">
+                            <span class="text-muted small">Percep IGV %</span>
+                            <div class="d-flex gap-1 align-items-center">
+                                <div class="input-group input-group-sm" style="width:82px;">
+                                    <input type="text" inputmode="decimal" class="form-control text-center"
+                                           wire:model.live="percepcionPorcentaje" placeholder="0">
                                     <span class="input-group-text bg-white px-1">%</span>
                                 </div>
+                                <input type="text" class="form-control form-control-sm text-end"
+                                       value="{{ number_format($percepcionMonto, 2) }}" readonly style="width:100px;">
                             </div>
-                            <span class="small fw-semibold text-muted">
-                                {{ $igvMonto > 0 ? '+'.$sym.' '.number_format($igvMonto,2) : '—' }}
-                            </span>
                         </div>
 
-                        {{-- Percepción IGV --}}
+                        {{-- Flete S/ --}}
                         <div class="d-flex justify-content-between align-items-center py-1">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="text-muted small" style="min-width:90px;">Percep. IGV</span>
-                                <div class="input-group input-group-sm" style="width:90px;">
-                                    <input type="number" class="form-control text-center" wire:model.live="percepcionPorcentaje"
-                                           min="0" max="100" step="0.01" placeholder="0">
-                                    <span class="input-group-text bg-white px-1">%</span>
-                                </div>
-                            </div>
-                            <span class="small fw-semibold text-muted">
-                                {{ $percepcionMonto > 0 ? '+'.$sym.' '.number_format($percepcionMonto,2) : '—' }}
-                            </span>
+                            <span class="text-muted small">Flete S/</span>
+                            <input type="text" inputmode="decimal" class="form-control form-control-sm text-end"
+                                   wire:model.live="flete" placeholder="0.00" style="max-width:130px;">
                         </div>
 
-                        {{-- Flete --}}
-                        <div class="d-flex justify-content-between align-items-center py-1">
-                            <span class="text-muted small" style="min-width:90px;">Flete</span>
-                            <div class="input-group input-group-sm" style="width:140px;">
-                                <span class="input-group-text bg-white px-2">{{ $sym }}</span>
-                                <input type="number" class="form-control text-end" wire:model.live="flete"
-                                       min="0" step="0.01" placeholder="0.00">
-                            </div>
-                        </div>
-
-                        {{-- Gastos operativos --}}
-                        <div class="d-flex justify-content-between align-items-center py-1 mb-2">
-                            <span class="text-muted small" style="min-width:90px;">Gastos Op.</span>
-                            <div class="input-group input-group-sm" style="width:140px;">
-                                <span class="input-group-text bg-white px-2">{{ $sym }}</span>
-                                <input type="number" class="form-control text-end" wire:model.live="gastosOp"
-                                       min="0" step="0.01" placeholder="0.00">
-                            </div>
-                        </div>
-
-                        {{-- Total --}}
-                        <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                        {{-- Total S/ --}}
+                        <div class="d-flex justify-content-between align-items-center pt-2 border-top mt-1">
                             <span class="fw-bold">
-                                TOTAL
-                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle fw-semibold ms-1" style="font-size:.7rem;">{{ $this->moneda }}</span>
+                                Total S/
+                                <span class="badge bg-secondary bg-opacity-10 text-dark border border-secondary-subtle fw-semibold ms-1" style="font-size:.7rem;">{{ $this->moneda }}</span>
                             </span>
-                            <span class="fw-bold fs-5 text-primary">{{ $sym }} {{ number_format($totalOrden, 2) }}</span>
+                            <input type="text" class="form-control form-control-sm text-end fw-bold text-primary"
+                                   value="{{ number_format($totalOrden, 2) }}" readonly
+                                   style="max-width:130px;font-size:1.1rem;">
                         </div>
 
                     </div>
                 </div>
 
-            </div>
+        </div>
+    </div>
         </div>
     </div>
 
@@ -1208,7 +1292,7 @@
         </div>
     </div>
 
-    <div wire:loading wire:target="nuevaOrden, volverHistorial, guardarOrden, agregarProducto, anularOrden, recibirOrden, condicionPago, seleccionarPresentacionCompra">
+    <div wire:loading wire:target="nuevaOrden, volverHistorial, guardarOrden, agregarProducto, anularOrden, recibirOrden, condicionPago, seleccionarPresentacionCompra, toggleRevertirIgv">
         <x-loader />
     </div>
 
@@ -1263,6 +1347,34 @@
                 document.body.style.removeProperty('overflow');
                 document.body.style.removeProperty('padding-right');
             });
+
+    $wire.on('cerrarModalNuevoProveedor', () => {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalNuevoProveedor')).hide();
+    });
+
+    document.addEventListener('keydown', function(e) {
+        const el = e.target;
+        if (!el.hasAttribute('data-compra-nav')) return;
+        let dir = 0;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') dir = 1;
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') dir = -1;
+        else return;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            if (el.tagName === 'INPUT' && (el.type === 'text' || el.type === '')) {
+                if (e.key === 'ArrowLeft' && el.selectionStart !== 0) return;
+                if (e.key === 'ArrowRight' && el.selectionStart !== el.value.length) return;
+            }
+            if (el.tagName === 'TEXTAREA') {
+                if (e.key === 'ArrowLeft' && el.selectionStart !== 0) return;
+                if (e.key === 'ArrowRight' && el.selectionStart !== el.value.length) return;
+            }
+        }
+        e.preventDefault();
+        const all = Array.from(document.querySelectorAll('[data-compra-nav]'));
+        const idx = all.indexOf(el);
+        const next = all[idx + dir];
+        if (next) { next.focus(); if (next.select) next.select(); }
+    }, true);
     </script>
     @endscript
 
