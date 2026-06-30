@@ -68,6 +68,20 @@ class LogisticaController extends Controller
             </script>";
         }
     }
+    public function distribucionFlete()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("distribucion_flete");
+            return view('logistica/distribucion_flete', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>
+                alert(\"Error Al Mostrar Contenido. Redireccionando Al Inicio\");
+                window.location.href = '" . route('admin') . "';
+            </script>";
+        }
+    }
+
     public function compras()
     {
         try {

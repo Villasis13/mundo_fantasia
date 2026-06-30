@@ -340,7 +340,7 @@
                     @endif
 
                     {{-- Tabla Pedidos --}}
-                    @if($tabModal === 'pedidos')
+                    @if($tabModal === 'pedidos' && $validarCaja)
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light sticky-top">
@@ -416,7 +416,7 @@
                     @endif
 
                     {{-- Tabla Proformas --}}
-                    @if($tabModal === 'proformas')
+                    @if($tabModal === 'proformas' && $validarCaja)
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light sticky-top">

@@ -40,8 +40,22 @@ class Compras extends Component
     public string $moneda                = 'PEN';
     public string $guiaRemitente         = '';
     public string $guiaTransportista     = '';
-    public array  $transportistas        = [['nombre' => '']];
+    public array  $transportistas        = [['id' => 0, 'nombre' => '', 'ruc' => '', 'fact' => '', 'fecha' => '']];
     public string $observacion           = '';
+
+    // ── Modal transportista ───────────────────────────────────
+    public int    $slotActivo          = 0;
+    public string $buscarTransportista = '';
+    public string $tabTransportista    = 'seleccionar';
+    public string $ntRuc               = '';
+    public string $ntNombre            = '';
+    public string $ntChofer            = '';
+    public string $ntVehiculo          = '';
+    public string $ntPlaca             = '';
+    public string $ntDireccion         = '';
+    public string $ntTelefono          = '';
+    public string $ntRucMensaje        = '';
+    public string $ntRucMensajeTipo    = '';
     public        $docAdjunto            = null;
     public string $flete                = '0';
     public string $gastosOp             = '0';
@@ -165,12 +179,119 @@ class Compras extends Component
 
     public function agregarTransportista(): void
     {
-        $this->transportistas[] = ['nombre' => ''];
+        $this->transportistas[] = ['id' => 0, 'nombre' => '', 'ruc' => '', 'fact' => '', 'fecha' => ''];
     }
 
     public function quitarTransportista(int $idx): void
     {
         array_splice($this->transportistas, $idx, 1);
+    }
+
+    public function abrirModalTransportista(int $index): void
+    {
+        $this->slotActivo          = $index;
+        $this->buscarTransportista = '';
+        $this->tabTransportista    = 'seleccionar';
+        $this->resetNuevoTransportista();
+        $this->dispatch('abrirModalTransportista');
+    }
+
+    public function abrirTabNuevo(): void
+    {
+        $this->tabTransportista = 'nuevo';
+        $this->resetNuevoTransportista();
+    }
+
+    public function abrirTabSeleccionar(): void
+    {
+        $this->tabTransportista    = 'seleccionar';
+        $this->buscarTransportista = '';
+    }
+
+    public function seleccionarTransportista(int $id): void
+    {
+        foreach ($this->transportistas as $i => $slot) {
+            if ($i !== $this->slotActivo && ($slot['id'] ?? 0) === $id) return;
+        }
+
+        $t = DB::table('transportistas')->where('id_transportista', $id)->first();
+        if (!$t) return;
+
+        $slots = $this->transportistas;
+        $slots[$this->slotActivo]['id']     = $id;
+        $slots[$this->slotActivo]['nombre'] = $t->transportista_nombre;
+        $slots[$this->slotActivo]['ruc']    = $t->transportista_ruc ?? '';
+        $this->transportistas = $slots;
+
+        $this->dispatch('cerrarModalTransportista');
+    }
+
+    public function ntBuscarRuc(): void
+    {
+        $ruc = trim($this->ntRuc);
+
+        if (strlen($ruc) !== 11 || !ctype_digit($ruc)) {
+            $this->ntRucMensaje     = 'El RUC debe tener exactamente 11 dígitos.';
+            $this->ntRucMensajeTipo = 'error';
+            return;
+        }
+
+        $this->ntRucMensaje = $this->ntRucMensajeTipo = '';
+
+        try {
+            $response = Http::withHeaders(['Accept' => 'application/json'])
+                ->asForm()
+                ->post('https://api.migo.pe/api/v1/ruc', [
+                    'token' => config('services.tokens.api_migo'),
+                    'ruc'   => $ruc,
+                ]);
+            $data = $response->json();
+
+            if ($data['success'] ?? false) {
+                $this->ntNombre         = strtoupper($data['nombre_o_razon_social'] ?? '');
+                $this->ntDireccion      = mb_convert_case(strtolower($data['direccion_simple'] ?? ''), MB_CASE_TITLE, 'UTF-8');
+                $this->ntRucMensaje     = 'Datos encontrados.';
+                $this->ntRucMensajeTipo = 'success';
+            } else {
+                $this->ntRucMensaje     = $data['message'] ?? 'RUC no encontrado.';
+                $this->ntRucMensajeTipo = 'error';
+            }
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            $this->ntRucMensaje     = 'Error al consultar el servicio externo.';
+            $this->ntRucMensajeTipo = 'error';
+        }
+    }
+
+    public function guardarNuevoTransportista(): void
+    {
+        $this->validate([
+            'ntNombre' => 'required|string|max:255',
+        ], [
+            'ntNombre.required' => 'El nombre / razón social es obligatorio.',
+        ]);
+
+        $id = DB::table('transportistas')->insertGetId([
+            'transportista_nombre'    => strtoupper(trim($this->ntNombre)),
+            'transportista_ruc'       => trim($this->ntRuc) ?: null,
+            'transportista_chofer'    => trim($this->ntChofer) ?: null,
+            'transportista_vehiculo'  => trim($this->ntVehiculo) ?: null,
+            'transportista_placa'     => trim($this->ntPlaca) ?: null,
+            'transportista_direccion' => trim($this->ntDireccion) ?: null,
+            'transportista_telefono'  => trim($this->ntTelefono) ?: null,
+            'transportista_estado'    => 1,
+            'created_at'              => now(),
+            'updated_at'              => now(),
+        ]);
+
+        $this->seleccionarTransportista($id);
+    }
+
+    private function resetNuevoTransportista(): void
+    {
+        $this->ntRuc = $this->ntNombre = $this->ntChofer   = '';
+        $this->ntVehiculo = $this->ntPlaca = $this->ntDireccion = $this->ntTelefono = '';
+        $this->ntRucMensaje = $this->ntRucMensajeTipo = '';
     }
 
     public function cargarSugerencias(): void
@@ -401,11 +522,9 @@ class Compras extends Component
         $percepcionMonto = round(($subtotalNeto + $igvMonto) * $percepcionPct / 100, 2);
         $total           = round($subtotalNeto + $igvMonto + $percepcionMonto + $flete + $gastos, 2);
 
-        $transportistasJson = null;
-        $trans = array_filter($this->transportistas, fn($t) => !empty(trim($t['nombre'] ?? '')));
-        if (!empty($trans)) {
-            $transportistasJson = json_encode(array_values($trans));
-        }
+        $transportistasGuardar = array_values(
+            array_filter($this->transportistas, fn($t) => !empty(trim($t['nombre'] ?? '')))
+        );
 
         $siguiente = DB::table('orden_compra')->count() + 1;
         $numero    = 'OC-' . date('Y') . '-' . str_pad($siguiente, 4, '0', STR_PAD_LEFT);
@@ -445,7 +564,6 @@ class Compras extends Component
                 'orden_compra_fecha_vencimiento'    => $this->fechaVencimiento ?: null,
                 'orden_compra_guia_remitente'             => $this->guiaRemitente ?: null,
                 'orden_compra_guia_transportista'         => $this->guiaTransportista ?: null,
-                'orden_compra_transportistas'             => $transportistasJson,
                 'orden_compra_doc_adjuntado'              => $docPath,
                 'orden_compra_observacion'                => $this->observacion ?: null,
                 'orden_compra_total'                      => $total,
@@ -464,6 +582,20 @@ class Compras extends Component
                 'created_at'                     => now(),
                 'updated_at'                     => now(),
             ]);
+
+            // Transportistas
+            foreach ($transportistasGuardar as $orden => $t) {
+                DB::table('orden_compra_transportistas')->insert([
+                    'id_orden_compra'  => $idOrden,
+                    'oc_trans_nombre'  => trim($t['nombre'] ?? '') ?: null,
+                    'oc_trans_ruc'     => trim($t['ruc']    ?? '') ?: null,
+                    'oc_trans_fact'    => trim($t['fact']   ?? '') ?: null,
+                    'oc_trans_fecha'   => trim($t['fecha']  ?? '') ?: null,
+                    'oc_trans_orden'   => $orden,
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ]);
+            }
 
             // Distribuir el flete total proporcionalmente entre ítems
             $totalItems    = collect($this->items)->sum('total');
@@ -1106,7 +1238,7 @@ class Compras extends Component
         $this->descuentoImporte     = '0';
         $this->igvPorcentaje        = '0';
         $this->percepcionPorcentaje = '0';
-        $this->transportistas       = [['nombre' => '']];
+        $this->transportistas       = [['id' => 0, 'nombre' => '', 'ruc' => '', 'fact' => '', 'fecha' => '']];
         $this->fechaEmision         = now()->format('Y-m-d');
         $this->fechaAlmacenamiento  = now()->endOfMonth()->format('Y-m-d');
         $this->proximoNumero = (string) ((int) DB::table('orden_compra')->max('id_orden_compra') + 1);
@@ -1367,12 +1499,24 @@ class Compras extends Component
             ->select('a.id_almacen', 'a.almacen_nombre', 'e.empresa_nombrecomercial')
             ->orderBy('e.empresa_nombrecomercial')->get();
 
+        $listaTransportistas = DB::table('transportistas')
+            ->where('transportista_estado', 1)
+            ->when($this->buscarTransportista, fn($q) =>
+                $q->where('transportista_nombre', 'like', "%{$this->buscarTransportista}%")
+                  ->orWhere('transportista_ruc', 'like', "%{$this->buscarTransportista}%")
+            )
+            ->orderBy('transportista_nombre')
+            ->get()
+            ->map(fn($r) => (array) $r)
+            ->toArray();
+
         return view('livewire.logistica.compras', compact(
             'empresas', 'proveedores', 'tiposPago',
             'ordenes', 'proveedoresHistorial', 'almacenes',
             'esAdmin', 'esSuperAdmin', 'esAdministrador',
             'subtotal', 'descuentoMonto', 'subtotalNeto',
-            'igvMonto', 'percepcionMonto', 'fleteGlobal', 'totalOrden'
+            'igvMonto', 'percepcionMonto', 'fleteGlobal', 'totalOrden',
+            'listaTransportistas'
         ));
     }
 

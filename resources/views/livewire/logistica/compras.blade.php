@@ -655,49 +655,77 @@
                 </div>
             </div>
 
-            {{-- FILA 3: Transportista 1 --}}
-            <div class="row g-2 mb-2">
+            {{-- FILA 3+: Transportistas dinámicos --}}
+            @foreach($transportistas as $idx => $t)
+            <div class="row g-2 mb-2 align-items-end" wire:key="trans-{{ $idx }}">
+
+                <div class="col-auto d-flex align-items-end">
+                    @if($idx === 0)
+                    <label class="form-label fw-semibold small text-secondary mb-1 invisible">T</label>
+                    @endif
+                    <button type="button"
+                            class="btn btn-sm btn-primary"
+                            wire:click="abrirModalTransportista({{ $idx }})"
+                            wire:loading.attr="disabled" wire:target="abrirModalTransportista({{ $idx }})"
+                            title="Seleccionar transportista {{ $idx + 1 }}">
+                        <span wire:loading wire:target="abrirModalTransportista({{ $idx }})" class="spinner-border spinner-border-sm"></span>
+                        <i wire:loading.remove wire:target="abrirModalTransportista({{ $idx }})" class="fa-solid fa-truck"></i>
+                    </button>
+                </div>
+
                 <div class="col-md-4">
+                    @if($idx === 0)
                     <label class="form-label fw-semibold small text-secondary mb-1">Transportista</label>
-                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
+                    @endif
+                    <input type="text" class="form-control form-control-sm"
+                           value="{{ $t['nombre'] }}" readonly placeholder="Nombre / Razón Social">
                 </div>
 
                 <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">RUC Transportista</label>
-                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
+                    @if($idx === 0)
+                    <label class="form-label fw-semibold small text-secondary mb-1">RUC</label>
+                    @endif
+                    <input type="text" class="form-control form-control-sm"
+                           value="{{ $t['ruc'] }}" readonly placeholder="RUC">
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    @if($idx === 0)
                     <label class="form-label fw-semibold small text-secondary mb-1">N° Fact.</label>
-                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
+                    @endif
+                    <input type="text" class="form-control form-control-sm"
+                           wire:model.blur="transportistas.{{ $idx }}.fact"
+                           placeholder="N° Fact." data-compra-nav>
                 </div>
 
                 <div class="col-md-2">
+                    @if($idx === 0)
                     <label class="form-label fw-semibold small text-secondary mb-1">Fecha</label>
-                    <input type="date" class="form-control form-control-sm" readonly data-compra-nav>
+                    @endif
+                    <input type="date" class="form-control form-control-sm"
+                           wire:model.blur="transportistas.{{ $idx }}.fecha"
+                           data-compra-nav>
+                </div>
+
+                <div class="col-auto">
+                    @if(count($transportistas) > 1)
+                    <button type="button" class="btn btn-sm btn-outline-danger px-2"
+                            wire:click="quitarTransportista({{ $idx }})"
+                            title="Quitar">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                    @endif
                 </div>
             </div>
+            @endforeach
 
-            {{-- FILA 4: Transportista 2 --}}
-            <div class="row g-2 mb-2">
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Transportista</label>
-                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">RUC Transportista</label>
-                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
-                </div>
-
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold small text-secondary mb-1">N° Fact.</label>
-                    <input type="text" class="form-control form-control-sm" readonly placeholder="—" data-compra-nav>
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Fecha</label>
-                    <input type="date" class="form-control form-control-sm" readonly data-compra-nav>
+            <div class="row mb-1">
+                <div class="col-auto">
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            wire:click="agregarTransportista"
+                            wire:loading.attr="disabled" wire:target="agregarTransportista">
+                        <i class="fa-solid fa-plus me-1"></i>Agregar transportista
+                    </button>
                 </div>
             </div>
 
@@ -1292,12 +1320,184 @@
         </div>
     </div>
 
+    {{-- ══ Modal: Seleccionar / Crear Transportista ══ --}}
+    <div class="modal fade" id="modalTransportista" tabindex="-1" wire:ignore.self
+         data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div style="height:4px;" class="bg-primary"></div>
+                <div class="modal-header border-0 pb-0 pt-3 px-4">
+                    <h6 class="modal-title fw-bold mb-0">
+                        <i class="fa-solid fa-truck me-2 text-primary"></i>
+                        Transportista {{ $slotActivo + 1 }}
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="px-4 pt-2">
+                    <ul class="nav nav-tabs nav-tabs-sm">
+                        <li class="nav-item">
+                            <button class="nav-link py-1 px-3 {{ $tabTransportista === 'seleccionar' ? 'active' : '' }}"
+                                    wire:click="abrirTabSeleccionar"
+                                    wire:loading.attr="disabled" wire:target="abrirTabSeleccionar">
+                                <span wire:loading wire:target="abrirTabSeleccionar" class="spinner-border spinner-border-sm me-1"></span>
+                                <i wire:loading.remove wire:target="abrirTabSeleccionar" class="fa-solid fa-list me-1"></i>Seleccionar
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link py-1 px-3 {{ $tabTransportista === 'nuevo' ? 'active' : '' }}"
+                                    wire:click="abrirTabNuevo"
+                                    wire:loading.attr="disabled" wire:target="abrirTabNuevo">
+                                <span wire:loading wire:target="abrirTabNuevo" class="spinner-border spinner-border-sm me-1"></span>
+                                <i wire:loading.remove wire:target="abrirTabNuevo" class="fa-solid fa-plus me-1"></i>Nuevo
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="modal-body px-4 pb-4 pt-3">
+
+                    {{-- Tab: Seleccionar --}}
+                    @if($tabTransportista === 'seleccionar')
+                    <div class="input-group input-group-sm mb-3">
+                        <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                        <input type="text" class="form-control"
+                               wire:model.live="buscarTransportista"
+                               placeholder="Buscar por nombre o RUC...">
+                    </div>
+
+                    <div style="max-height:360px;overflow-y:auto;">
+                        @if(!empty($listaTransportistas))
+                        <div class="list-group list-group-flush">
+                            @foreach($listaTransportistas as $tr)
+                            @php
+                                $tid      = $tr['id_transportista'];
+                                $slotOtro = null;
+                                foreach ($transportistas as $_i => $_s) {
+                                    if ($_i !== $slotActivo && ($_s['id'] ?? 0) === $tid) { $slotOtro = $_i; break; }
+                                }
+                                $enOtro    = $slotOtro !== null;
+                                $labelOtro = $enOtro ? 'T' . ($slotOtro + 1) : null;
+                            @endphp
+                            <button type="button"
+                                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 px-3 {{ $enOtro ? 'disabled opacity-50' : '' }}"
+                                    @if(!$enOtro)
+                                        wire:click="seleccionarTransportista({{ $tid }})"
+                                        wire:loading.attr="disabled" wire:target="seleccionarTransportista({{ $tid }})"
+                                    @endif
+                                    wire:key="tr-{{ $tid }}">
+                                <div>
+                                    <span class="fw-semibold d-block lh-sm">{{ $tr['transportista_nombre'] }}</span>
+                                    <small class="text-muted">
+                                        RUC: {{ $tr['transportista_ruc'] ?: '—' }}
+                                        @if($tr['transportista_chofer'])· Chofer: {{ $tr['transportista_chofer'] }}@endif
+                                    </small>
+                                </div>
+                                @if($enOtro)
+                                    <span class="badge bg-warning text-dark">Asignado {{ $labelOtro }}</span>
+                                @else
+                                    <span wire:loading wire:target="seleccionarTransportista({{ $tid }})"><span class="spinner-border spinner-border-sm text-primary"></span></span>
+                                    <i wire:loading.remove wire:target="seleccionarTransportista({{ $tid }})" class="fa-solid fa-chevron-right text-muted opacity-50"></i>
+                                @endif
+                            </button>
+                            @endforeach
+                        </div>
+                        @else
+                        <div class="text-center text-muted py-4">
+                            <i class="fa-solid fa-truck fa-2x opacity-25 d-block mb-2"></i>
+                            <small>No se encontraron transportistas.</small>
+                        </div>
+                        @endif
+                    </div>
+                    @endif
+
+                    {{-- Tab: Nuevo --}}
+                    @if($tabTransportista === 'nuevo')
+                    <div class="row g-3">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold small text-secondary mb-1">RUC</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control"
+                                       wire:model="ntRuc"
+                                       wire:keydown.enter="ntBuscarRuc"
+                                       placeholder="20512345678" maxlength="11">
+                                <button type="button" class="btn btn-outline-secondary px-2"
+                                        wire:click="ntBuscarRuc"
+                                        wire:loading.attr="disabled" wire:target="ntBuscarRuc"
+                                        title="Consultar RUC">
+                                    <span wire:loading wire:target="ntBuscarRuc"><span class="spinner-border spinner-border-sm"></span></span>
+                                    <span wire:loading.remove wire:target="ntBuscarRuc"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                </button>
+                            </div>
+                            @if($ntRucMensaje)
+                            <div class="mt-1 small {{ $ntRucMensajeTipo === 'success' ? 'text-success' : 'text-danger' }}">
+                                <i class="fa-solid {{ $ntRucMensajeTipo === 'success' ? 'fa-circle-check' : 'fa-circle-xmark' }} me-1"></i>{{ $ntRucMensaje }}
+                            </div>
+                            @endif
+                        </div>
+
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Nombre / Razón Social <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('ntNombre') is-invalid @enderror"
+                                   wire:model="ntNombre" placeholder="Ej. TRANSPORTES SAC">
+                            @error('ntNombre') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Chofer</label>
+                            <input type="text" class="form-control" wire:model="ntChofer" placeholder="Nombre del chofer">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Vehículo</label>
+                            <input type="text" class="form-control" wire:model="ntVehiculo" placeholder="Tipo de vehículo">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Placa</label>
+                            <input type="text" class="form-control" wire:model="ntPlaca" placeholder="ABC-123">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Teléfono</label>
+                            <input type="text" class="form-control" wire:model="ntTelefono" placeholder="(opcional)">
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Dirección</label>
+                            <input type="text" class="form-control" wire:model="ntDireccion" placeholder="(opcional)">
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end mt-3">
+                        <button type="button" class="btn btn-primary fw-semibold px-4"
+                                wire:click="guardarNuevoTransportista"
+                                wire:loading.attr="disabled" wire:target="guardarNuevoTransportista">
+                            <span wire:loading wire:target="guardarNuevoTransportista"><span class="spinner-border spinner-border-sm me-1"></span>Guardando...</span>
+                            <span wire:loading.remove wire:target="guardarNuevoTransportista"><i class="fa-solid fa-floppy-disk me-1"></i>Guardar y Seleccionar</span>
+                        </button>
+                    </div>
+                    @endif
+
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div wire:loading wire:target="nuevaOrden, volverHistorial, guardarOrden, agregarProducto, anularOrden, recibirOrden, condicionPago, seleccionarPresentacionCompra, toggleRevertirIgv">
         <x-loader />
     </div>
 
     @script
     <script>
+        $wire.on('abrirModalTransportista', () => {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalTransportista')).show();
+        });
+        $wire.on('cerrarModalTransportista', () => {
+            const m = bootstrap.Modal.getInstance(document.getElementById('modalTransportista'));
+            if (m) m.hide();
+        });
+
         $wire.on('abrirModalAnular', () => {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAnularOrden')).show();
         });

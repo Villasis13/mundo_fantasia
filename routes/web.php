@@ -108,6 +108,7 @@ Route::prefix('logistica')->middleware(['auth', 'verifyUserStatus'])->group(func
     Route::get('/autoconsumo-pdf',[LogisticaController::class ,'autoconsumo_pdf'])->name('logistica.autoconsumo_pdf')->middleware('can:autoconsumo.submenu');
     Route::get('/autoconsumo-ticket',[LogisticaController::class ,'autoconsumo_ticket'])->name('logistica.autoconsumo_ticket')->middleware('can:autoconsumo.submenu');
     Route::get('/notas_compra',[LogisticaController::class ,'notas_compra'])->name('logistica.notas_compra')->middleware('can:notas_compra.submenu');
+    Route::get('/distribucion_flete',[LogisticaController::class ,'distribucionFlete'])->name('logistica.distribucion_flete')->middleware('can:distribucion_flete.submenu');
 });
 /* ======================== LOGÍSTICA - FINAL ========================*/
 

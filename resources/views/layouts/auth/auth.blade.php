@@ -88,11 +88,11 @@
             position: relative;
             z-index: 1;
             width: 100%;
-            max-width: 420px;
-            margin: 1.5rem;
+            max-width: 340px;
+            margin: 1rem;
             background: rgba(255, 255, 255, 0.97);
-            border-radius: 20px;
-            padding: 2.5rem 2.25rem 2rem;
+            border-radius: 16px;
+            padding: 2rem 1.75rem 1.75rem;
             box-shadow:
                 0 0 0 1px rgba(255,255,255,.08),
                 0 24px 64px rgba(0, 0, 0, 0.45),
@@ -104,19 +104,19 @@
         .auth-card-logo {
             display: flex;
             justify-content: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
         .auth-card-logo img {
-            max-width: 280px;
-            max-height: 140px;
+            max-width: 180px;
+            max-height: 80px;
             object-fit: contain;
         }
         .auth-card-logo-placeholder {
-            width: 64px; height: 64px;
-            border-radius: 16px;
+            width: 52px; height: 52px;
+            border-radius: 14px;
             background: #1a56db;
             display: flex; align-items: center; justify-content: center;
-            color: #fff; font-size: 1.5rem;
+            color: #fff; font-size: 1.3rem;
         }
 
         /* Footer */
