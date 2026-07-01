@@ -23,10 +23,14 @@ class GenerarGuia extends Component
     // ── Sección 2: Cliente / Destinatario ─────────────────────
     public ?int   $idClientes   = null;
     public ?int   $idVenta      = null;
+    public string $facturaVinculada = '';
     public string $cliTipoDoc   = '';
     public string $cliNumDoc    = '';
     public string $cliNombre    = '';
     public string $cliDireccion = '';
+    public string $cliDistrito     = '';
+    public string $cliProvincia    = '';
+    public string $cliDepartamento = '';
 
     // ── Sección 3: Transporte ─────────────────────────────────
     public string $tipoTrans     = '02'; // 02 privado | 01 público
@@ -252,6 +256,7 @@ class GenerarGuia extends Component
             ->whereIn('v.venta_tipo', ['01', '03', '20'])
             ->select(
                 'v.id_venta', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_total', 'v.id_clientes',
+                'v.venta_tipo', 'v.venta_fecha',
                 'c.id_tipo_documento', 'c.cliente_numero', 'c.cliente_nombre', 'c.cliente_razonsocial', 'c.cliente_direccion'
             );
         if ($serie !== '') $q->where('v.venta_serie', 'like', "%{$serie}%");
@@ -265,8 +270,12 @@ class GenerarGuia extends Component
             return;
         }
 
+        $tipos = ['01' => 'Factura', '03' => 'Boleta', '20' => 'Nota de Venta', '07' => 'N. Crédito', '08' => 'N. Débito'];
         $this->factResultados = $ventas->map(fn($v) => [
             'id_venta'          => $v->id_venta,
+            'tipo'              => $tipos[$v->venta_tipo] ?? $v->venta_tipo,
+            'comprobante'       => $v->venta_serie . '-' . str_pad((string)$v->venta_correlativo, 8, '0', STR_PAD_LEFT),
+            'fecha'             => \Carbon\Carbon::parse($v->venta_fecha)->format('d/m/Y'),
             'serie'             => $v->venta_serie,
             'correlativo'       => str_pad((string)$v->venta_correlativo, 8, '0', STR_PAD_LEFT),
             'total'             => number_format((float)$v->venta_total, 2),
@@ -290,7 +299,8 @@ class GenerarGuia extends Component
             ->first();
         if (!$v) return;
 
-        $this->idVenta     = $idVenta;
+        $this->idVenta          = $idVenta;
+        $this->facturaVinculada = $v->venta_serie . '-' . str_pad((string) $v->venta_correlativo, 8, '0', STR_PAD_LEFT);
         $this->idClientes  = (int) $v->id_clientes;
         $this->cliTipoDoc  = (string) $v->id_tipo_documento;
         $this->cliNumDoc   = $v->cliente_numero ?? '';
@@ -323,6 +333,7 @@ class GenerarGuia extends Component
     public function desvincularFactura(): void
     {
         $this->idVenta = null;
+        $this->facturaVinculada = '';
         $this->items = [];
     }
 
@@ -435,7 +446,8 @@ class GenerarGuia extends Component
     private function resetFormulario(): void
     {
         $this->reset([
-            'guiaObservacion', 'idClientes', 'idVenta', 'cliTipoDoc', 'cliNumDoc', 'cliNombre', 'cliDireccion',
+            'guiaObservacion', 'idClientes', 'idVenta', 'facturaVinculada', 'cliTipoDoc', 'cliNumDoc', 'cliNombre', 'cliDireccion',
+            'cliDistrito', 'cliProvincia', 'cliDepartamento',
             'transRuc', 'transNombre', 'vehPlaca', 'vehMarca', 'vehCarreta', 'certMtc',
             'condNumDoc', 'condNombre', 'condApellidos', 'condLicencia',
             'partidaKey', 'idTiendaPartida', 'dirPartida', 'ubigeoPartida', 'dirLlegada', 'ubigeoLlegada',
@@ -464,12 +476,9 @@ class GenerarGuia extends Component
         $empresasPartida = DB::table('empresa')->where('empresa_estado', '!=', 0)
             ->orderBy('empresa_razon_social')->get(['id_empresa', 'empresa_nombrecomercial']);
 
-        $sedesPartida = $this->partidaEmpresaId()
-            ? DB::table('tiendas')->where('id_empresa', $this->partidaEmpresaId())
-                ->where('tienda_estado', 1)->orderBy('tienda_nombre')
-                ->get(['id_tienda', 'tienda_nombre', 'tienda_direccion'])
-            : collect();
+        // Siguiente número de guía para la serie actual
+        $nextNumero = (int) DB::table('guias_remision')->where('guia_serie', $this->serie)->max('guia_correlativo') + 1;
 
-        return view('livewire.gestion-ventas.generar-guia', compact('tipoDocs', 'ubigeos', 'almacenes', 'empresasPartida', 'sedesPartida'));
+        return view('livewire.gestion-ventas.generar-guia', compact('tipoDocs', 'ubigeos', 'nextNumero'));
     }
 }

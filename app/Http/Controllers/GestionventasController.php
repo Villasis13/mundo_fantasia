@@ -188,111 +188,136 @@ class GestionventasController extends Controller
             $serieCompleta = $g->guia_numero ?: ($g->guia_serie . '-' . str_pad((string)$g->guia_correlativo, 8, '0', STR_PAD_LEFT));
 
             $pdf = new PDFBufeo('P', 'mm', 'A4');
-            $pdf->SetMargins(10, 10, 10);
-            $pdf->SetAutoPageBreak(true, 15);
+            $pdf->SetMargins(8, 8, 8);
+            $pdf->SetAutoPageBreak(true, 12);
             $pdf->AddPage();
-            $xL = 10; $W = 190;
+            $pdf->SetDrawColor(0, 0, 0);
+            $pdf->SetLineWidth(0.3);
 
-            // ── Encabezado ──
-            $ys = 10;
-            if ($g->empresa_foto && file_exists(public_path($g->empresa_foto))) {
-                $pdf->Image(public_path($g->empresa_foto), $xL, $ys, 45, 0);
+            // ── QR (izquierda) ──
+            $rutaQr = null;
+            try { $rutaQr = $this->general->generar_qr($serieCompleta); } catch (\Throwable $e) { $rutaQr = null; }
+            if ($rutaQr && file_exists($rutaQr)) {
+                $pdf->Image($rutaQr, 8, 8, 26, 26);
+            } elseif ($g->empresa_foto && file_exists(public_path($g->empresa_foto))) {
+                $pdf->Image(public_path($g->empresa_foto), 8, 8, 26, 0);
             }
-            $pdf->SetXY(58, $ys + 2);
-            $pdf->SetFont('Helvetica', 'B', 11);
-            $pdf->MultiCell(82, 5, utf8_decode($g->empresa_razon_social ?? ''), 0, 'C');
-            $pdf->SetX(58);
+
+            // ── Datos empresa (centro) ──
+            $pdf->SetXY(36, 8);
+            $pdf->SetFont('Helvetica', 'B', 14);
+            $pdf->Cell(112, 6, utf8_decode($g->empresa_razon_social ?? ''), 0, 2, 'C');
+            $pdf->SetX(36);
             $pdf->SetFont('Helvetica', '', 7);
-            $pdf->MultiCell(82, 4, utf8_decode($g->empresa_domiciliofiscal ?? ''), 0, 'C');
+            $pdf->MultiCell(112, 3.6, utf8_decode($g->empresa_domiciliofiscal ?? ''), 0, 'C');
 
-            $rx = 145; $rw = 55;
-            $pdf->SetDrawColor(80, 80, 80); $pdf->SetLineWidth(0.4);
-            $pdf->SetXY($rx, $ys);
+            // ── Recuadro derecha (RUC / tipo / número) ──
+            $rx = 150; $rw = 52;
+            $pdf->SetXY($rx, 8);
             $pdf->SetFont('Helvetica', 'B', 10);
-            $pdf->Cell($rw, 9, 'RUC ' . ($g->empresa_ruc ?? ''), 1, 1, 'C');
+            $pdf->Cell($rw, 6, 'R.U.C. ' . ($g->empresa_ruc ?? ''), 1, 2, 'C');
             $pdf->SetX($rx);
-            $pdf->SetFont('Helvetica', 'B', 7);
-            $pdf->SetFillColor(230, 230, 230);
-            $pdf->Cell($rw, 5, utf8_decode('GUÍA DE REMISIÓN ELECTRÓNICA'), 1, 1, 'C', true);
+            $pdf->SetFont('Helvetica', 'B', 8);
+            $pdf->MultiCell($rw, 4, utf8_decode("GUIA DE REMISIÓN\nELECTRONICA\n" . $tipoGuia), 1, 'C');
             $pdf->SetX($rx);
-            $pdf->Cell($rw, 5, $tipoGuia, 1, 1, 'C', true);
-            $pdf->SetFillColor(255, 255, 255);
-            $pdf->SetX($rx);
-            $pdf->SetFont('Helvetica', 'B', 13);
-            $pdf->Cell($rw, 11, $serieCompleta, 1, 1, 'C');
+            $pdf->SetFont('Helvetica', 'B', 11);
+            $pdf->Cell($rw, 7, $serieCompleta, 1, 1, 'C');
 
-            $pdf->SetY(max(38, $pdf->GetY()) + 3);
-            $pdf->SetLineWidth(0.4);
-            $pdf->Line($xL, $pdf->GetY(), $xL + $W, $pdf->GetY());
-            $pdf->Ln(3);
+            $pdf->SetY(max(36, $pdf->GetY()) + 1);
 
-            $bar = function ($label) use ($pdf, $xL) {
-                $pdf->SetFillColor(80, 80, 80); $pdf->SetTextColor(255, 255, 255);
-                $pdf->SetFont('Helvetica', 'B', 8); $pdf->SetX($xL);
-                $pdf->Cell(190, 6, utf8_decode(' ' . $label), 0, 1, 'L', true);
-                $pdf->SetFillColor(255, 255, 255); $pdf->SetTextColor(0, 0, 0); $pdf->Ln(1);
+            // ── Fila: fechas / peso / bultos ──
+            $mk = function ($lab, $val, $wl, $wv) use ($pdf) {
+                $pdf->SetFont('Helvetica', 'B', 7); $pdf->Cell($wl, 6, utf8_decode($lab), 'LTB', 0, 'L');
+                $pdf->SetFont('Helvetica', '', 7);  $pdf->Cell($wv, 6, utf8_decode($val), 'RTB', 0, 'L');
             };
-            $linea = function ($et, $val, $w1 = 38, $w2 = 152, $ln = 1) use ($pdf, $xL) {
-                $pdf->SetX($xL);
-                $pdf->SetFont('Helvetica', 'B', 8); $pdf->Cell($w1, 5, utf8_decode($et), 0, 0, 'L');
-                $pdf->SetFont('Helvetica', '', 8);  $pdf->Cell($w2, 5, utf8_decode($val), 0, $ln, 'L');
+            $pdf->SetX(8);
+            $mk('Fecha de Emisión:',  $g->guia_fecha_emision ? date('d/m/Y', strtotime($g->guia_fecha_emision)) : '-', 28, 26);
+            $mk('Fecha de Traslado:', $g->guia_fecha_traslado ? date('d/m/Y', strtotime($g->guia_fecha_traslado)) : '-', 28, 24);
+            $mk('Peso Bruto (kg):',   number_format((float)$g->guia_peso_bruto, 2), 26, 18);
+            $mk('Cant. Bultos:',      (string)($g->guia_nro_bultos ?? ''), 22, 22);
+            $pdf->Ln(6);
+
+            // ── Dos columnas: partida/destinatario | llegada/transporte ──
+            $y0 = $pdf->GetY() + 1;
+            $hdr = function ($x, $w, $txt) use ($pdf) {
+                $pdf->SetX($x); $pdf->SetFont('Helvetica', 'B', 7); $pdf->SetFillColor(220, 220, 220);
+                $pdf->Cell($w, 5, utf8_decode($txt), 1, 2, 'C', true); $pdf->SetFillColor(255, 255, 255);
             };
+            $val = function ($x, $w, $txt) use ($pdf) {
+                $pdf->SetX($x); $pdf->SetFont('Helvetica', '', 7);
+                $pdf->Cell($w, 5, utf8_decode(mb_strimwidth((string)$txt, 0, 78, '..')), 1, 2, 'L');
+            };
+            $lw = 96;
 
-            // ── Datos generales ──
-            $bar('DATOS DE LA GUÍA');
-            $linea('Fecha de emisión:', $g->guia_fecha_emision ? date('d/m/Y', strtotime($g->guia_fecha_emision)) : '-');
-            $linea('Fecha de traslado:', $g->guia_fecha_traslado ? date('d/m/Y', strtotime($g->guia_fecha_traslado)) : '-');
-            $linea('Motivo de traslado:', $motivo);
-            $linea('Modalidad de transporte:', $modalidad);
-            if ($g->guia_observaciones) $linea('Observación:', $g->guia_observaciones);
-            $pdf->Ln(2);
+            // Columna izquierda
+            $pdf->SetXY(8, $y0);
+            $hdr(8, $lw, 'PUNTO DE PARTIDA');
+            $val(8, $lw, trim(($g->guia_partida_direccion ?? '') . ' - ' . ($g->ubigeo_part_txt ?? '')));
+            $hdr(8, $lw, 'DESTINATARIO (Razón Social y/o Nombres)');
+            $val(8, $lw, $g->guia_dest_nombre ?? '');
+            $val(8, $lw, 'RUC N° ' . ($g->guia_dest_numero_doc ?? '') . '        O/C N°');
+            $leftEndY = $pdf->GetY();
 
-            // ── Destinatario ──
-            $bar('DATOS DEL DESTINATARIO');
-            $linea('Destinatario:', $g->guia_dest_nombre ?? '-');
-            $linea('N° Documento:', $g->guia_dest_numero_doc ?? '-');
-            if ($g->guia_dest_direccion) $linea('Dirección:', $g->guia_dest_direccion);
-            $pdf->Ln(2);
+            // Columna derecha
+            $pdf->SetXY(106, $y0);
+            $hdr(106, $lw, 'PUNTO DE LLEGADA');
+            $val(106, $lw, trim(($g->guia_llegada_direccion ?? '') . ' - ' . ($g->ubigeo_llega_txt ?? '')));
+            $hdr(106, $lw, 'UNIDAD DE TRANSPORTE / CONDUCTOR');
+            $val(106, $lw, 'Marca y Placa: ' . trim(($g->guia_vehiculo_marca ?? '') . ' ' . ($g->guia_vehiculo_placa ?? '')));
+            $val(106, $lw, 'Chofer: ' . ($g->guia_conductor_nombre ?? '') . '    Vehic: ' . ($g->guia_vehiculo_carreta ?? ''));
+            $val(106, $lw, 'Licencia de Conducir: ' . ($g->guia_conductor_licencia ?? ''));
+            $rightEndY = $pdf->GetY();
 
-            // ── Traslado ──
-            $bar('PUNTO DE PARTIDA Y LLEGADA');
-            $linea('Partida:', trim(($g->guia_partida_direccion ?? '') . '  —  ' . ($g->ubigeo_part_txt ?? '')));
-            $linea('Llegada:', trim(($g->guia_llegada_direccion ?? '') . '  —  ' . ($g->ubigeo_llega_txt ?? '')));
-            $linea('Peso bruto:', number_format((float)$g->guia_peso_bruto, 3) . ' ' . ($g->guia_unidad_medida ?? 'KGM') . '   |   Bultos: ' . ($g->guia_nro_bultos ?? '-'));
-            $pdf->Ln(2);
+            $pdf->SetY(max($leftEndY, $rightEndY) + 2);
 
-            // ── Transporte ──
-            $bar('TRANSPORTE / CONDUCTOR / VEHÍCULO');
-            $linea('Transportista:', trim(($g->guia_transportista_ruc ?? '') . '  ' . ($g->guia_transportista_nombre ?? '')) ?: '-');
-            $linea('Vehículo (placa):', trim(($g->guia_vehiculo_placa ?? '') . '  ' . ($g->guia_vehiculo_marca ?? '')));
-            $linea('Conductor:', trim(($g->guia_conductor_nombre ?? '') . '  Lic: ' . ($g->guia_conductor_licencia ?? '') . '  Doc: ' . ($g->guia_conductor_numero_doc ?? '')));
-            $pdf->Ln(2);
-
-            // ── Bienes ──
-            $bar('BIENES A TRASLADAR');
-            $pdf->SetFont('Helvetica', 'B', 7.5);
-            $pdf->SetFillColor(220, 220, 220); $pdf->SetX($xL);
-            $cols = ['Código'=>24, 'Descripción'=>96, 'U.M.'=>16, 'Cant.'=>18, 'P.Unit'=>18, 'P.Total'=>18];
-            foreach ($cols as $h=>$w) $pdf->Cell($w, 6, utf8_decode($h), 1, 0, 'C', true);
-            $pdf->Ln();
+            // ── Tabla de bienes: Cod | Cant | Pres | Detalle ──
+            $pdf->SetX(8);
+            $pdf->SetFont('Helvetica', 'B', 7); $pdf->SetFillColor(235, 235, 235);
+            $pdf->Cell(20, 5, 'Cod',     1, 0, 'C', true);
+            $pdf->Cell(14, 5, 'Cant',    1, 0, 'C', true);
+            $pdf->Cell(16, 5, 'Pres',    1, 0, 'C', true);
+            $pdf->Cell(144, 5, 'Detalle', 1, 1, 'C', true);
             $pdf->SetFillColor(255, 255, 255);
-            $pdf->SetFont('Helvetica', '', 7.5);
-            $pesoTotal = 0;
+            $pdf->SetFont('Helvetica', '', 7);
             foreach ($detalle as $d) {
-                $pt = (float)$d->detalle_cantidad * (float)$d->detalle_peso_unitario;
-                $pesoTotal += $pt;
-                $pdf->SetX($xL);
-                $pdf->Cell(24, 5, utf8_decode(mb_strimwidth($d->detalle_codigo ?? '-', 0, 14, '..')), 1, 0, 'C');
-                $pdf->Cell(96, 5, utf8_decode(mb_strimwidth($d->detalle_descripcion ?? '', 0, 62, '..')), 1, 0, 'L');
-                $pdf->Cell(16, 5, $d->detalle_unidad_medida ?? '', 1, 0, 'C');
-                $pdf->Cell(18, 5, number_format((float)$d->detalle_cantidad, 2), 1, 0, 'R');
-                $pdf->Cell(18, 5, number_format((float)$d->detalle_peso_unitario, 3), 1, 0, 'R');
-                $pdf->Cell(18, 5, number_format($pt, 3), 1, 1, 'R');
+                $pdf->SetX(8);
+                $pdf->Cell(20, 5, utf8_decode($d->detalle_codigo ?? ''), 1, 0, 'C');
+                $pdf->Cell(14, 5, number_format((float)$d->detalle_cantidad, 0), 1, 0, 'C');
+                $pdf->Cell(16, 5, utf8_decode($d->detalle_unidad_medida ?? ''), 1, 0, 'C');
+                $pdf->Cell(144, 5, utf8_decode(mb_strimwidth((string)($d->detalle_descripcion ?? ''), 0, 108, '..')), 1, 1, 'L');
             }
-            $pdf->SetFont('Helvetica', 'B', 7.5);
-            $pdf->SetX($xL);
-            $pdf->Cell(172, 6, 'PESO TOTAL', 1, 0, 'R');
-            $pdf->Cell(18, 6, number_format($pesoTotal, 3), 1, 1, 'R');
+
+            // ── Pie: Transportista / Motivo de traslado / Conformidad ──
+            $comprobantePago = '';
+            if (!empty($g->id_venta)) {
+                $vv = DB::table('ventas')->where('id_venta', $g->id_venta)->first();
+                if ($vv) $comprobantePago = $vv->venta_serie . '-' . str_pad((string)$vv->venta_correlativo, 8, '0', STR_PAD_LEFT);
+            }
+            $motivoDesc = strtoupper(trim(preg_replace('/^\d+\s*-\s*/', '', $motivo)));
+
+            $pdf->SetY($pdf->GetY() + 3);
+            $fy = $pdf->GetY();
+
+            // Columna izquierda: TRANSPORTISTA
+            $pdf->SetXY(8, $fy);
+            $hdr(8, 70, 'TRANSPORTISTA');
+            $val(8, 70, 'RUC N° ' . ($g->guia_transportista_ruc ?? ''));
+            $val(8, 70, 'Comprobante de Pago:');
+            $val(8, 70, $comprobantePago);
+
+            // Columna central: MOTIVO DE TRASLADO
+            $pdf->SetXY(80, $fy);
+            $hdr(80, 68, 'MOTIVO DE TRASLADO');
+            $val(80, 68, $motivoDesc);
+            $val(80, 68, '');
+            $val(80, 68, '9. ' . ($g->empresa_razon_social ?? ''));
+
+            // Columna derecha: Conformidad del Cliente
+            $pdf->SetXY(150, $fy);
+            $hdr(150, 52, 'Conformidad del Cliente');
+            $val(150, 52, 'Sr(a):');
+            $val(150, 52, '');
+            $val(150, 52, 'Soft: SIGA.4');
 
             $pdf->Output('I', 'guia-' . $serieCompleta . '.pdf');
             exit;
@@ -302,6 +327,16 @@ class GestionventasController extends Controller
         }
     }
 
+    public function registro_ventas()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("registro_ventas");
+            return view('gestionventas/registro_ventas', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error Al Mostrar Contenido. Redireccionando Al Inicio');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
     public function registro_pagos()
     {
         try {

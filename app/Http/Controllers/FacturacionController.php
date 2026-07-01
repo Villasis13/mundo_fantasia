@@ -826,6 +826,17 @@ class FacturacionController extends Controller
         }
     }
 
+    public function envio_guias_sunat()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("envio_guias_sunat");
+            return view('facturacion/envio_guias_sunat', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error Al Mostrar Contenido. Redireccionando Al Inicio'); window.location.href = '" . route('admin') . "';</script>";
+        }
+    }
+
     public function guias_remision()
     {
         try {

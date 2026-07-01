@@ -1,20 +1,37 @@
-<div class="container-fluid py-3" style="max-width:1080px;">
+<div class="container-fluid py-3">
 
     <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
-            <a href="{{ route('Gestionventas.guias_remision') }}" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-arrow-left"></i></a>
-            <div>
-                <h5 class="fw-bold mb-0">Pendientes de Envío</h5>
-                <small class="text-muted">Guías de remisión generadas</small>
-            </div>
+            <h5 class="fw-bold mb-0"><i class="fa-solid fa-truck-fast me-2 text-primary"></i>Guías de Remisión Remitente</h5>
         </div>
         <a href="{{ route('Gestionventas.generar_guia') }}" class="btn btn-sm btn-primary"><i class="fa-solid fa-plus me-1"></i>Generar guía</a>
     </div>
 
     <div class="card border-0 shadow-sm mb-3">
-        <div class="card-body py-2">
-            <input type="text" class="form-control form-control-sm" wire:model.live.debounce.400ms="buscar"
-                   placeholder="Buscar por número, serie, destinatario o documento..." style="max-width:380px;">
+        <div class="card-body">
+            <div class="row g-2 align-items-end">
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold mb-1">Emisión desde</label>
+                    <input type="date" class="form-control form-control-sm" wire:model.live="filtroDesde">
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold mb-1">Emisión hasta</label>
+                    <input type="date" class="form-control form-control-sm" wire:model.live="filtroHasta">
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold mb-1">Estado</label>
+                    <select class="form-select form-select-sm" wire:model.live="filtroEstado">
+                        <option value="">Todos</option>
+                        <option value="pendiente">Pendiente de enviar</option>
+                        <option value="enviado">Enviado</option>
+                        <option value="anulado">Anulado</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small fw-semibold mb-1">N.º de guía</label>
+                    <input type="text" class="form-control form-control-sm" wire:model.live.debounce.400ms="filtroNumero" placeholder="Serie o número">
+                </div>
+            </div>
         </div>
     </div>
 
@@ -45,10 +62,12 @@
                                 <div class="text-muted" style="font-size:.72rem">{{ $g->guia_dest_numero_doc }}</div>
                             </td>
                             <td class="text-center">
-                                @if($g->guia_estado_sunat == 1)
-                                    <span class="badge bg-success">Enviada</span>
+                                @if($g->guia_estado == 0)
+                                    <span class="badge bg-danger">Anulado</span>
+                                @elseif($g->guia_estado_sunat == 1)
+                                    <span class="badge bg-success">Enviado</span>
                                 @else
-                                    <span class="badge bg-warning text-dark">Pendiente</span>
+                                    <span class="badge bg-warning text-dark">Pendiente de enviar</span>
                                 @endif
                             </td>
                             <td class="text-center pe-3">

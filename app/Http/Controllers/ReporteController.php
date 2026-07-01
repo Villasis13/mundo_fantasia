@@ -4251,6 +4251,219 @@ class ReporteController extends Controller
     public function reporteComprasExcel(Request $request)
     {
         try {
+            $desde = $request->get('desde') ?: now()->startOfMonth()->toDateString();
+            $hasta = $request->get('hasta') ?: now()->toDateString();
+            $transportista = trim((string) $request->get('transportista', ''));
+            $tipo  = $request->get('tipo', 'registro');
+
+            $empresa = DB::table('empresa')->orderBy('id_empresa')->first();
+
+            $compras = DB::table('orden_compra as oc')
+                ->join('proveedores as p', 'p.id_proveedores', '=', 'oc.id_proveedores')
+                ->where('oc.orden_compra_activo', 1)
+                ->where('oc.orden_compra_estado', '!=', 'anulado')
+                ->whereRaw('DATE(COALESCE(oc.orden_compra_fecha_emision_doc, oc.orden_compra_fecha)) BETWEEN ? AND ?', [$desde, $hasta])
+                ->when($transportista !== '', fn($q) => $q->whereRaw('oc.orden_compra_transportistas LIKE ?', ['%' . $transportista . '%']))
+                ->select(
+                    'oc.orden_compra_fecha', 'oc.orden_compra_fecha_emision_doc', 'oc.fecha_almacenamiento',
+                    'oc.orden_compra_tipo_doc', 'oc.orden_compra_numero_doc', 'oc.condicion_pago',
+                    'oc.orden_compra_fecha_vencimiento',
+                    'oc.orden_compra_igv_monto', 'oc.orden_compra_percepcion_monto',
+                    'oc.orden_compra_descuento_monto', 'oc.orden_compra_flete',
+                    'p.proveedores_nombre', 'p.proveedores_numero_documento',
+                    DB::raw('(SELECT COALESCE(SUM(detalle_compra_total_pedido),0) FROM orden_compra_detalle d WHERE d.id_orden_compra = oc.id_orden_compra) as mercaderia')
+                )
+                ->orderByRaw('COALESCE(oc.orden_compra_fecha_emision_doc, oc.orden_compra_fecha) ASC')
+                ->get();
+
+            $filas = $compras->map(function ($c) {
+                $subtotal = (float) $c->mercaderia - (float) ($c->orden_compra_descuento_monto ?? 0);
+                $igv      = (float) ($c->orden_compra_igv_monto ?? 0);
+                return [
+                    'fecha'     => $c->orden_compra_fecha_emision_doc ?: $c->orden_compra_fecha,
+                    'feccarga'  => $c->fecha_almacenamiento ?: $c->orden_compra_fecha,
+                    'comprob'   => trim(($c->orden_compra_tipo_doc ?? '') . ' ' . ($c->orden_compra_numero_doc ?? '')),
+                    'ruc'       => $c->proveedores_numero_documento,
+                    'proveedor' => $c->proveedores_nombre,
+                    'condicion' => strtoupper($c->condicion_pago ?? ''),
+                    'subtotal'  => round($subtotal, 2),
+                    'igv'       => round($igv, 2),
+                    'perc'      => round((float) ($c->orden_compra_percepcion_monto ?? 0), 2),
+                    'dscto'     => round((float) ($c->orden_compra_descuento_monto ?? 0), 2),
+                    'flete'     => round((float) ($c->orden_compra_flete ?? 0), 2),
+                    'total'     => round($subtotal + $igv, 2),
+                ];
+            });
+
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle($tipo === 'estudio' ? 'Para Estudio' : 'Registro Compras');
+
+            // ══════════ TIPO: PARA ESTUDIO (plantilla SUNAT Formato 8.1 — solo cabecera) ══════════
+            if ($tipo === 'estudio') {
+                $tpl = public_path('PARA ESTUDIO - Registro de compras AQB.xlsx');
+                $ssEstudio = \PhpOffice\PhpSpreadsheet\IOFactory::load($tpl);
+                $hoja = $ssEstudio->getActiveSheet();
+                $maxRow = $hoja->getHighestRow();
+                for ($rr = $maxRow; $rr >= 8; $rr--) { // dejar solo la cabecera (filas 1-7)
+                    $hoja->removeRow($rr, 1);
+                }
+
+                // Mapear tipo de comprobante -> código SUNAT
+                $mapTipo = function ($td) {
+                    $u = strtoupper(trim((string) $td));
+                    if (str_contains($u, 'FACT'))                              return ['01', 'FACTURA'];
+                    if (str_contains($u, 'BOLETA'))                            return ['03', 'BOLETA'];
+                    if (str_contains($u, 'NOTA DE CR') || str_contains($u, 'CREDITO')) return ['07', 'NOTA DE CREDITO'];
+                    if (str_contains($u, 'NOTA DE DE') || str_contains($u, 'DEBITO'))  return ['08', 'NOTA DE DEBITO'];
+                    return ['00', $u !== '' ? $u : 'SIN COMPROBANTE'];
+                };
+
+                $items = $compras->map(function ($c) use ($mapTipo) {
+                    [$cod, $lbl] = $mapTipo($c->orden_compra_tipo_doc);
+                    $sub = (float) $c->mercaderia - (float) ($c->orden_compra_descuento_monto ?? 0);
+                    $igv = (float) ($c->orden_compra_igv_monto ?? 0);
+                    $partes = explode('-', (string) $c->orden_compra_numero_doc);
+                    return [
+                        'cod'    => $cod,
+                        'lbl'    => $lbl,
+                        'fecha'  => $c->orden_compra_fecha_emision_doc ?: $c->orden_compra_fecha,
+                        'vcto'   => $c->orden_compra_fecha_vencimiento,
+                        'serie'  => $partes[0] ?? '',
+                        'numero' => $partes[1] ?? '',
+                        'ruc'    => $c->proveedores_numero_documento,
+                        'prov'   => $c->proveedores_nombre,
+                        'sub'    => round($sub, 2),
+                        'igv'    => round($igv, 2),
+                        'total'  => round($sub + $igv, 2),
+                    ];
+                })->sort(function ($a, $b) {
+                    return [$a['cod'], $a['fecha']] <=> [$b['cod'], $b['fecha']];
+                })->values();
+
+                $STR = \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING;
+                $r = 8; $n = 1; $codActual = null;
+                foreach ($items as $it) {
+                    // Fila título por tipo de comprobante (ej. "01 FACTURA")
+                    if ($it['cod'] !== $codActual) {
+                        if ($codActual !== null) $r++; // salto de línea entre grupos
+                        $codActual = $it['cod'];
+                        $hoja->setCellValue("A{$r}", $it['cod'] . ' ' . $it['lbl']);
+                        $hoja->getStyle("A{$r}")->getFont()->setBold(true);
+                        $r++;
+                    }
+                    $hoja->setCellValueExplicit("A{$r}", str_pad((string) $n, 6, '0', STR_PAD_LEFT), $STR);
+                    $hoja->setCellValue("B{$r}", date('d/m/Y', strtotime($it['fecha'])));
+                    if ($it['vcto']) $hoja->setCellValue("C{$r}", date('d/m/Y', strtotime($it['vcto'])));
+                    $hoja->setCellValueExplicit("D{$r}", $it['cod'], $STR);
+                    $hoja->setCellValueExplicit("E{$r}", $it['serie'], $STR);
+                    $hoja->setCellValueExplicit("G{$r}", $it['numero'], $STR);
+                    // H -> tipo de documento de identidad (SUNAT): 1=DNI, 6=RUC, 0=Otros
+                    $docNum = preg_replace('/\D/', '', (string) $it['ruc']);
+                    $tdoc   = strlen($docNum) === 11 ? '6' : (strlen($docNum) === 8 ? '1' : '0');
+                    $hoja->setCellValueExplicit("H{$r}", $tdoc, $STR);
+                    $hoja->setCellValueExplicit("I{$r}", (string) $it['ruc'], $STR);
+                    $hoja->setCellValue("J{$r}", $it['prov']);
+                    if ($it['igv'] > 0) {
+                        $hoja->setCellValue("P{$r}", $it['sub']);
+                        $hoja->setCellValue("Q{$r}", $it['igv']);
+                    } else {
+                        $hoja->setCellValue("R{$r}", $it['sub']);
+                    }
+                    $hoja->setCellValue("V{$r}", $it['total']);
+                    foreach (['P', 'Q', 'R', 'V'] as $col) {
+                        $hoja->getStyle("{$col}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+                    }
+                    // AD -> cuenta contable fija para todos
+                    $hoja->setCellValueExplicit("AD{$r}", '6011101', $STR);
+                    $n++; $r++;
+                }
+
+                $nombreArchivo = 'compras_para_estudio_' . date('Ymd_His') . '.xlsx';
+                header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                header("Content-Disposition: attachment; filename=\"{$nombreArchivo}\"");
+                header('Cache-Control: max-age=0');
+                (new Xlsx($ssEstudio))->save('php://output');
+                exit;
+            }
+
+            // ══════════ TIPO: REGISTRO DE COMPRAS (diseño con cabecera) ══════════
+            $sheet->setCellValue('A1', $empresa->empresa_razon_social ?? '');
+            $sheet->setCellValue('A2', $empresa->empresa_domiciliofiscal ?? '');
+            $sheet->setCellValue('A3', 'RUC N° ' . ($empresa->empresa_ruc ?? ''));
+            $sheet->getStyle('A1:A3')->getFont()->setBold(true)->getColor()->setRGB('0204E6');
+            $sheet->setCellValue('F3', 'Registro de Compras');
+            $sheet->getStyle('F3')->getFont()->setBold(true)->setSize(13);
+
+            $sheet->setCellValue('A5', 'Fecha de Emision');
+            $sheet->setCellValue('C5', 'Del ' . date('d/m/Y', strtotime($desde)) . ' al ' . date('d/m/Y', strtotime($hasta)));
+            $sheet->setCellValue('A6', 'Fecha de Ingreso al Almacen');
+            $sheet->setCellValue('C6', '** Todo **');
+            $sheet->getStyle('A5:A6')->getFont()->setBold(true);
+
+            $headRow = 7;
+            $headers = ['ITEM', 'FECHA', 'FEC. CARGA', 'TIPO COMPROBANTE', 'RUC', 'PROVEEDOR', 'CONDICION',
+                        'SUBTOTAL', 'IGV', 'PERC.IGV', 'DSCTO', 'FLETE', 'TOTAL'];
+            $sheet->fromArray($headers, null, "A{$headRow}");
+            $sheet->getStyle("A{$headRow}:M{$headRow}")->applyFromArray([
+                'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 9],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0204E6']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+            ]);
+
+            $r = $headRow + 1;
+            $i = 1;
+            $tSub = $tIgv = $tFlete = $tTotal = 0;
+            foreach ($filas as $f) {
+                $sheet->setCellValue("A{$r}", $i);
+                $sheet->setCellValue("B{$r}", date('d/m/Y', strtotime($f['fecha'])));
+                $sheet->setCellValue("C{$r}", $f['feccarga'] ? date('d/m/Y', strtotime($f['feccarga'])) : '');
+                $sheet->setCellValue("D{$r}", $f['comprob']);
+                $sheet->setCellValueExplicit("E{$r}", (string) $f['ruc'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue("F{$r}", $f['proveedor']);
+                $sheet->setCellValue("G{$r}", $f['condicion']);
+                $sheet->setCellValue("H{$r}", $f['subtotal']);
+                $sheet->setCellValue("I{$r}", $f['igv']);
+                $sheet->setCellValue("J{$r}", $f['perc']);
+                $sheet->setCellValue("K{$r}", $f['dscto']);
+                $sheet->setCellValue("L{$r}", $f['flete']);
+                $sheet->setCellValue("M{$r}", $f['total']);
+                foreach (['H','I','J','K','L','M'] as $col) $sheet->getStyle("{$col}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle("A{$r}:M{$r}")->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D0D0D0']]]]);
+                $tSub += $f['subtotal']; $tIgv += $f['igv']; $tFlete += $f['flete']; $tTotal += $f['total'];
+                $i++; $r++;
+            }
+
+            $sheet->setCellValue("G{$r}", 'TOTAL GENERAL');
+            $sheet->setCellValue("H{$r}", round($tSub, 2));
+            $sheet->setCellValue("I{$r}", round($tIgv, 2));
+            $sheet->setCellValue("L{$r}", round($tFlete, 2));
+            $sheet->setCellValue("M{$r}", round($tTotal, 2));
+            foreach (['H','I','L','M'] as $col) $sheet->getStyle("{$col}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle("A{$r}:M{$r}")->applyFromArray([
+                'font' => ['bold' => true],
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'BDD7EE']],
+            ]);
+
+            foreach (range('A', 'M') as $col) $sheet->getColumnDimension($col)->setAutoSize(true);
+            // La columna ITEM solo muestra un número pequeño: ancho fijo angosto
+            $sheet->getColumnDimension('A')->setAutoSize(false)->setWidth(6);
+
+            $nombreArchivo = 'registro_compras_' . $desde . '_a_' . $hasta . '.xlsx';
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header("Content-Disposition: attachment; filename=\"{$nombreArchivo}\"");
+            header('Cache-Control: max-age=0');
+            (new Xlsx($spreadsheet))->save('php://output');
+            exit;
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+        }
+    }
+
+    public function reporteComprasExcelOld(Request $request)
+    {
+        try {
             $d    = $this->obtenerDatosReporteCompras($request);
             $tipo = $d['tipo'];
             $t    = $d['totales'];

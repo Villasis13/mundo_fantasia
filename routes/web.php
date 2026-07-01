@@ -117,6 +117,7 @@ Route::prefix('Gestionventas')->middleware(['auth', 'verifyUserStatus'])->group(
     route::get('/movimientos',[GestionventasController::class ,'movimientos'])->name('Gestionventas.movimientos')->middleware('can:movimientos.submenu');
     route::get('/realizar_ventas',[GestionventasController::class ,'realizar_ventas'])->name('Gestionventas.realizar_ventas')->middleware('can:realizar_ventas.submenu');
     route::get('/ventas_servicios',[GestionventasController::class ,'ventas_servicios'])->name('Gestionventas.ventas_servicios')->middleware('can:ventas_servicios.submenu');
+    route::get('/registro_ventas',[GestionventasController::class ,'registro_ventas'])->name('Gestionventas.registro_ventas')->middleware('can:registro_ventas.submenu');
     route::get('/guias_remision',[GestionventasController::class ,'guias_remision'])->name('Gestionventas.guias_remision')->middleware('can:guias_remision.submenu');
     route::get('/generar_guia',[GestionventasController::class ,'generar_guia'])->name('Gestionventas.generar_guia')->middleware('can:guias_remision.submenu');
     route::get('/pendientes_guia',[GestionventasController::class ,'pendientes_guia'])->name('Gestionventas.pendientes_guia')->middleware('can:guias_remision.submenu');
@@ -156,6 +157,7 @@ Route::prefix('facturacion')->middleware(['auth', 'verifyUserStatus'])->group(fu
     route::get('/imprimir_excel_ventas_declaras',[FacturacionController::class ,'imprimirExcelHistorialEnvios'])->name('facturacion.imprimir_excel_ventas_declaras')->middleware('can:historial_ventas_sunat.exportar');
     route::get('/alertas_sunat',[FacturacionController::class ,'alertas_sunat'])->name('facturacion.alertas_sunat')->middleware('can:alertas_sunat.submenu');
     route::get('/guias_remision',[FacturacionController::class ,'guias_remision'])->name('facturacion.guias_remision')->middleware('can:guias_remision.submenu');
+    route::get('/envio_guias_sunat',[FacturacionController::class ,'envio_guias_sunat'])->name('facturacion.envio_guias_sunat')->middleware('can:envio_guias_sunat.submenu');
     route::get('/conciliacion_sunat',[FacturacionController::class ,'conciliacion_sunat'])->name('facturacion.conciliacion_sunat')->middleware('can:conciliacion_sunat.submenu');
     route::get('/conciliacion_sunat/pdf',[FacturacionController::class ,'conciliacion_sunat_pdf'])->name('facturacion.conciliacion_sunat_pdf')->middleware('can:conciliacion_sunat.exportar');
     route::get('/conciliacion_sunat/excel',[FacturacionController::class ,'conciliacion_sunat_excel'])->name('facturacion.conciliacion_sunat_excel')->middleware('can:conciliacion_sunat.exportar');
