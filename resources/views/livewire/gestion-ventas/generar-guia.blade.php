@@ -26,7 +26,7 @@
         @else
             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalFacturaGuia"
                     wire:click="cargarFacturasIniciales">
-                <i class="fa-solid fa-link me-1"></i>Vincular factura
+                <i class="fa-solid fa-link me-1"></i>Cargar Factura/Boleta
             </button>
         @endif
     </div>
@@ -152,7 +152,7 @@
                 </div>
                 @if($idVenta)
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Serie y número de la factura</label>
+                    <label class="form-label small fw-semibold">Documentos Relacionados</label>
                     <input type="text" class="form-control form-control-sm fw-semibold text-success" value="{{ $facturaVinculada }}" disabled>
                 </div>
                 @endif
@@ -166,21 +166,13 @@
                     <label class="form-label small fw-semibold">Empresa transportista</label>
                     <input type="text" class="form-control form-control-sm" wire:model="transNombre">
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">RUC transportista</label>
-                    <input type="text" class="form-control form-control-sm" maxlength="11" wire:model="transRuc">
-                </div>
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold">Marca</label>
                     <input type="text" class="form-control form-control-sm" wire:model="vehMarca">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Placa <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm text-uppercase @error('vehPlaca') is-invalid @enderror" maxlength="8" wire:model="vehPlaca" placeholder="ABC-123">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Placa carreta</label>
-                    <input type="text" class="form-control form-control-sm text-uppercase" maxlength="8" wire:model="vehCarreta">
+                    <label class="form-label small fw-semibold">Placa(s) <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control form-control-sm text-uppercase @error('vehPlaca') is-invalid @enderror" maxlength="20" wire:model="vehPlaca" placeholder="ABC-123">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold">Licencia de conducir</label>
@@ -222,13 +214,12 @@
                 <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.8rem;">
                     <thead class="table-light">
                         <tr>
-                            <th style="width:90px;">Código</th>
+                            <th style="width:100px;">Código</th>
                             <th>Producto</th>
-                            <th style="width:80px;">U.M.</th>
-                            <th style="width:80px;">Cantidad</th>
-                            <th style="width:95px;">Peso Unit.</th>
-                            <th style="width:95px;">Peso Total</th>
-                            <th>Observación</th>
+                            <th style="width:80px;">UND</th>
+                            <th style="width:90px;">Cantidad</th>
+                            <th style="width:110px;">P. Venta</th>
+                            <th style="width:110px;" class="text-end">Total</th>
                             <th style="width:40px;"></th>
                         </tr>
                     </thead>
@@ -245,18 +236,16 @@
                                 </select>
                             </td>
                             <td><input type="number" min="0" step="1" class="form-control form-control-sm @error('items.'.$i.'.cantidad') is-invalid @enderror" wire:model.live="items.{{ $i }}.cantidad"></td>
-                            <td><input type="number" min="0" step="0.001" class="form-control form-control-sm" wire:model.live="items.{{ $i }}.peso"></td>
-                            <td class="text-end fw-semibold text-primary">{{ number_format((float)($it['cantidad'] ?? 0) * (float)($it['peso'] ?? 0), 3) }}</td>
-                            <td><input type="text" class="form-control form-control-sm" wire:model="items.{{ $i }}.observacion"></td>
+                            <td><input type="number" min="0" step="0.01" class="form-control form-control-sm" wire:model.live="items.{{ $i }}.precio"></td>
+                            <td class="text-end fw-semibold text-primary">{{ number_format((float)($it['cantidad'] ?? 0) * (float)($it['precio'] ?? 0), 2) }}</td>
                             <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" wire:click="quitarItem({{ $i }})"><i class="fa-solid fa-trash"></i></button></td>
                         </tr>
                         @empty
-                        <tr><td colspan="8" class="text-center text-muted py-3">No hay bienes registrados.</td></tr>
+                        <tr><td colspan="7" class="text-center text-muted py-3">No hay bienes registrados.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
-            <div class="text-end mt-2 small">Peso total estimado: <strong class="text-primary">{{ number_format($this->pesoTotal, 3) }} KG</strong></div>
 
             {{-- Footer --}}
             <div class="d-flex justify-content-end gap-2 mt-4">
@@ -274,17 +263,18 @@
     <div class="modal fade" id="modalFacturaGuia" tabindex="-1" wire:ignore.self>
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
-                <div class="modal-header"><h6 class="modal-title fw-bold">Vincular Factura</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-header"><h6 class="modal-title fw-bold">Cargar Factura a la Guía de Remisión</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body">
-                    <div class="row g-2 align-items-end mb-2">
-                        <div class="col"><label class="form-label small">Serie</label><input type="text" class="form-control form-control-sm" wire:model="factSerie" placeholder="F001"></div>
-                        <div class="col"><label class="form-label small">Correlativo</label><input type="text" class="form-control form-control-sm" wire:model="factCorrelativo" placeholder="00000001"></div>
-                        <div class="col-auto"><button class="btn btn-sm btn-primary" wire:click="buscarFactura"><i class="fa-solid fa-magnifying-glass me-1"></i>Buscar</button></div>
+                    <div class="mb-2">
+                        <label class="form-label small">Filtrar</label>
+                        <input type="text" class="form-control form-control-sm"
+                               wire:model.live.debounce.400ms="factFiltro"
+                               placeholder="Serie - Correlativo (ej. B001-00)">
                     </div>
                     @if($factMensaje)<div class="alert alert-warning py-1 small">{{ $factMensaje }}</div>@endif
                     @if(count($factResultados))
                     <table class="table table-sm table-hover align-middle">
-                        <thead class="table-light"><tr><th>Tipo</th><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th></th></tr></thead>
+                        <thead class="table-light"><tr><th>Tipo</th><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th class="text-end">Total</th><th></th></tr></thead>
                         <tbody>
                             @foreach($factResultados as $f)
                             <tr>
@@ -292,7 +282,8 @@
                                 <td class="small fw-semibold text-primary">{{ $f['comprobante'] }}</td>
                                 <td class="small">{{ $f['fecha'] }}</td>
                                 <td class="small">{{ $f['cliente_nombre'] }}<div class="text-muted">{{ $f['cliente_numero'] }}</div></td>
-                                <td><button class="btn btn-sm btn-primary" wire:click="vincularFactura('{{ $f['id_venta'] }}')">Vincular</button></td>
+                                <td class="small text-end fw-semibold">S/ {{ $f['total'] }}</td>
+                                <td><button class="btn btn-sm btn-primary" wire:click="vincularFactura('{{ $f['id_venta'] }}')">Cargar</button></td>
                             </tr>
                             @endforeach
                         </tbody>

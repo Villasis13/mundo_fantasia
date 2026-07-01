@@ -63,11 +63,15 @@ class GenerarGuia extends Component
     public string $buscarProducto       = '';
     public array  $resultadosProductos  = [];
 
-    // ── Vincular factura (modal) ──────────────────────────────
-    public string $factSerie       = '';
-    public string $factCorrelativo = '';
+    // ── Cargar factura (modal) ────────────────────────────────
+    public string $factFiltro      = '';   // serie-correlativo en un solo campo (ej. B001-00)
     public array  $factResultados  = [];
     public string $factMensaje     = '';
+
+    public function updatedFactFiltro(): void
+    {
+        $this->buscarFactura();
+    }
 
     // ── Buscar cliente (modal) ────────────────────────────────
     public string $buscarCliente      = '';
@@ -151,12 +155,18 @@ class GenerarGuia extends Component
 
     public function agregarProducto(int $idPro, string $codigo, string $nombre): void
     {
+        $precio = (float) (DB::table('producto_sucursal')
+            ->where('id_pro', $idPro)
+            ->when($this->idTienda ?? null, fn($q) => $q->where('id_tienda', $this->idTienda))
+            ->value('ps_precio_uni') ?? 0);
+
         $this->items[] = [
             'id_pro'      => $idPro,
             'codigo'      => $codigo,
             'descripcion' => $nombre,
             'um'          => 'NIU',
             'cantidad'    => '1',
+            'precio'      => $precio,
             'peso'        => '',
             'observacion' => '',
         ];
@@ -168,7 +178,7 @@ class GenerarGuia extends Component
     {
         $this->items[] = [
             'id_pro' => null, 'codigo' => '', 'descripcion' => '',
-            'um' => 'NIU', 'cantidad' => '1', 'peso' => '', 'observacion' => '',
+            'um' => 'NIU', 'cantidad' => '1', 'precio' => '', 'peso' => '', 'observacion' => '',
         ];
     }
 
@@ -246,8 +256,7 @@ class GenerarGuia extends Component
     public function buscarFactura(): void
     {
         $this->factMensaje = '';
-        $serie = trim($this->factSerie);
-        $corr  = trim($this->factCorrelativo);
+        $filtro = trim($this->factFiltro);
 
         $q = DB::table('ventas as v')
             ->join('clientes as c', 'c.id_clientes', '=', 'v.id_clientes')
@@ -265,15 +274,23 @@ class GenerarGuia extends Component
                 'v.venta_tipo', 'v.venta_fecha',
                 'c.id_tipo_documento', 'c.cliente_numero', 'c.cliente_nombre', 'c.cliente_razonsocial', 'c.cliente_direccion'
             );
-        if ($serie !== '') $q->where('v.venta_serie', 'like', "%{$serie}%");
-        if ($corr  !== '') $q->where('v.venta_correlativo', 'like', "%{$corr}%");
+        // Filtro único: serie-correlativo concatenado (ej. B001-00)
+        if ($filtro !== '') {
+            $like = '%' . $filtro . '%';
+            $q->where(function ($w) use ($like) {
+                $w->whereRaw("CONCAT(v.venta_serie, '-', LPAD(v.venta_correlativo, 8, '0')) LIKE ?", [$like])
+                  ->orWhereRaw("CONCAT(v.venta_serie, '-', v.venta_correlativo) LIKE ?", [$like])
+                  ->orWhere('v.venta_serie', 'like', $like)
+                  ->orWhere('v.venta_correlativo', 'like', $like);
+            });
+        }
 
-        $ventas = $q->orderByDesc('v.id_venta')->limit(5)->get();
+        $ventas = $q->orderByDesc('v.id_venta')->limit(8)->get();
 
         if ($ventas->isEmpty()) {
             $this->factResultados = [];
-            $this->factMensaje = ($serie !== '' || $corr !== '')
-                ? 'No se encontraron facturas con esos datos.'
+            $this->factMensaje = $filtro !== ''
+                ? 'No se encontraron comprobantes con ese filtro.'
                 : 'No hay ventas pendientes de vincular.';
             return;
         }
@@ -297,9 +314,8 @@ class GenerarGuia extends Component
 
     public function cargarFacturasIniciales(): void
     {
-        // Al abrir el modal: mostrar las últimas 5 ventas sin vincular (sin filtros)
-        $this->factSerie = '';
-        $this->factCorrelativo = '';
+        // Al abrir el modal: mostrar las últimas ventas sin vincular (sin filtro)
+        $this->factFiltro = '';
         $this->factMensaje = '';
         $this->buscarFactura();
     }
@@ -328,7 +344,8 @@ class GenerarGuia extends Component
         $det = DB::table('ventas_detalle as vd')
             ->leftJoin('productos as p', 'p.id_pro', '=', 'vd.id_pro')
             ->where('vd.id_venta', $idVenta)
-            ->select('vd.id_pro', 'vd.venta_detalle_nombre_producto', 'vd.venta_detalle_cantidad', 'p.pro_codigo')
+            ->select('vd.id_pro', 'vd.venta_detalle_nombre_producto', 'vd.venta_detalle_cantidad',
+                     'vd.venta_detalle_precio_unitario', 'p.pro_codigo')
             ->get();
         $this->items = $det->map(fn($d) => [
             'id_pro'      => $d->id_pro,
@@ -336,13 +353,13 @@ class GenerarGuia extends Component
             'descripcion' => $d->venta_detalle_nombre_producto,
             'um'          => 'NIU',
             'cantidad'    => (string) (int) $d->venta_detalle_cantidad,
+            'precio'      => (float) $d->venta_detalle_precio_unitario,
             'peso'        => '',
             'observacion' => '',
         ])->toArray();
 
         $this->factResultados = [];
-        $this->factSerie = '';
-        $this->factCorrelativo = '';
+        $this->factFiltro = '';
         $this->dispatch('cerrarModalFacturaGuia');
         session()->flash('success', 'Factura ' . $v->venta_serie . '-' . $v->venta_correlativo . ' vinculada.');
     }

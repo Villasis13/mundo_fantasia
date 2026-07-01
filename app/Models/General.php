@@ -68,6 +68,21 @@ class General extends Model
         return 'productos/' . $webpFilename;
     }
 
+    // QR a partir de texto/URL arbitrario (ej. enlace a SUNAT)
+    public function generar_qr_texto(string $contenido, string $nombre)
+    {
+        QrLib::load();
+        $dirQr = base_path('ApiFacturacion/imagenqr');
+        if (!is_dir($dirQr)) {
+            mkdir($dirQr, 0755, true);
+        }
+        $ruta_qr = $dirQr . DIRECTORY_SEPARATOR . preg_replace('/[^A-Za-z0-9_\-]/', '_', $nombre) . '.png';
+        if (!file_exists($ruta_qr)) {
+            \QRcode::png($contenido, $ruta_qr, 'H - mejor', '3');
+        }
+        return $ruta_qr;
+    }
+
     public function generar_qr($id)
     {
         QrLib::load();
