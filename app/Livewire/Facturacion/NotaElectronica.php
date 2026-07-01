@@ -131,7 +131,7 @@ class NotaElectronica extends Component
             ->join('tipo_afectacion as ta',     'ta.id_tipo_afectacion', '=', 'ps.id_tipo_afectacion')
             ->join('medida as m',               'm.id_medida',           '=', 'p.id_medida')
             ->where('vd.id_venta',    $this->idVenta)
-            ->where('ps.id_sucursal', $this->idSucursal)
+            ->where('ps.id_tienda', $this->idSucursal)
             ->where('p.pro_estado',   1)
             ->select(
                 'vd.id_pro',
@@ -349,7 +349,7 @@ class NotaElectronica extends Component
             ->join('productos as p',        'p.id_pro',              '=', 'ps.id_pro')
             ->join('tipo_afectacion as ta',  'ta.id_tipo_afectacion', '=', 'ps.id_tipo_afectacion')
             ->join('medida as m',            'm.id_medida',           '=', 'p.id_medida')
-            ->where('ps.id_sucursal', $this->idSucursal)
+            ->where('ps.id_tienda', $this->idSucursal)
             ->where('ps.ps_estado',   1)
             ->where('p.pro_estado',   1)
             ->when(strlen($termino) >= 2, fn($q) =>
@@ -393,7 +393,7 @@ class NotaElectronica extends Component
             ->join('productos as p',        'p.id_pro',              '=', 'ps.id_pro')
             ->join('tipo_afectacion as ta',  'ta.id_tipo_afectacion', '=', 'ps.id_tipo_afectacion')
             ->join('medida as m',            'm.id_medida',           '=', 'p.id_medida')
-            ->where('ps.id_sucursal', $this->idSucursal)
+            ->where('ps.id_tienda', $this->idSucursal)
             ->where('ps.ps_estado',   1)
             ->where('p.id_pro',       $idPro)
             ->select(
@@ -543,17 +543,16 @@ class NotaElectronica extends Component
                 return;
             }
 
-            // ── Validar HABIDO en SUNAT ───────────────────────────────
-            $respCliente = (new General())->consultar_documento_migo($idTipoDoc, $numDocumento);
-            if (empty($respCliente) || ($respCliente['success'] ?? false) !== true || empty($respCliente['data'])) {
-                session()->flash('error', 'No se encontró información para el número de documento ingresado.');
-                $this->dispatch('notaError');
-                return;
-            }
-            if (($respCliente['data']['condicion_de_domicilio'] ?? '') !== 'HABIDO') {
-                session()->flash('error', 'El cliente no se encuentra en condición HABIDO según SUNAT.');
-                $this->dispatch('notaError');
-                return;
+            // ── Validación de documento (NO bloqueante) ───────────────
+            // La nota reversa/modifica un comprobante ya emitido: el cliente ya es válido.
+            // La consulta a SUNAT/MIGO es solo referencial y la validación HABIDO se hará al enviar.
+            $docsGenericos = ['00000000', '11111111', '00000000000', '11111111111'];
+            if (!in_array($numDocumento, $docsGenericos, true)) {
+                try {
+                    (new General())->consultar_documento_migo($idTipoDoc, $numDocumento);
+                } catch (\Throwable $e) {
+                    (new Logs())->insertarLog($e);
+                }
             }
 
             // ── Serie ─────────────────────────────────────────────────

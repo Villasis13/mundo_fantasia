@@ -1455,6 +1455,7 @@ class Caja extends Component
                 'v.venta_tipo',
                 'v.venta_total',
                 'v.anulado_sunat',
+                'v.venta_estado_sunat',
                 'v.created_at',
                 DB::raw("COALESCE(c.cliente_razonsocial, c.cliente_nombre, 'Sin cliente') as cliente_nombre"),
                 DB::raw("COALESCE(c.cliente_numero, '') as cliente_doc"),

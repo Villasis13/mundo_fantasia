@@ -86,7 +86,7 @@
                                 $clienteNom = $vta->id_tipo_documento == 4 ? ($vta->cliente_razonsocial ?: $vta->cliente_nombre) : ($vta->cliente_nombre ?: $vta->cliente_razonsocial);
                                 $pagos = $pagosPorVenta[$vta->id_venta] ?? [];
                             @endphp
-                            <tr>
+                            <tr @if($vta->tiene_nc ?? 0) style="background-color:#f8d7da;" @endif>
                                 <td class="ps-3">
                                     <span class="fw-semibold text-primary">{{ $vta->venta_serie }}-{{ str_pad($vta->venta_correlativo, 8, '0', STR_PAD_LEFT) }}</span>
                                     <span class="badge bg-light text-dark border ms-1">{{ $tipoLbl }}</span>
@@ -130,6 +130,7 @@
                                             <span wire:loading.remove wire:target="reimprimir({{ $vta->id_venta }})"><i class="fa-solid fa-print"></i></span>
                                             <span wire:loading wire:target="reimprimir({{ $vta->id_venta }})"><span class="spinner-border spinner-border-sm"></span></span>
                                         </button>
+                                        @if(!($vta->tiene_nc ?? 0))
                                         @can('registro_ventas.actualizar')
                                         <button type="button" class="btn btn-sm btn-outline-warning" title="Rectificar / Editar"
                                                 wire:click="abrirRectificar({{ $vta->id_venta }})"
@@ -138,12 +139,15 @@
                                             <span wire:loading wire:target="abrirRectificar({{ $vta->id_venta }})"><span class="spinner-border spinner-border-sm"></span></span>
                                         </button>
                                         @endcan
+                                        @if(($vta->venta_estado_sunat ?? 0) == 1)
                                         @can('generar_nota.listar')
                                         <a href="{{ route('facturacion.generar_nota', ['id' => $vta->id_venta, 'tipo' => '07', 'motivo' => '01']) }}"
                                            class="btn btn-sm btn-outline-danger" title="Nota de Crédito por anulación de la operación">
                                             <i class="fa-solid fa-file-circle-minus"></i>
                                         </a>
                                         @endcan
+                                        @endif
+                                        @endif
                                     </div>
                                 </td>
                             </tr>

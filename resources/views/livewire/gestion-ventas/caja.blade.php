@@ -554,12 +554,14 @@
                                                         <i class="fa-solid fa-pen"></i>
                                                     </span>
                                                 </button>
+                                                @if(($vr->venta_estado_sunat ?? 0) == 1)
                                                 <button type="button"
                                                         class="btn btn-outline-danger"
                                                         title="Anular venta (genera Nota de Crédito)"
                                                         wire:click="confirmarAnularVenta({{ $vr->id_venta }})">
                                                     <i class="fa-solid fa-ban"></i>
                                                 </button>
+                                                @endif
                                                 @endif
                                             </div>
                                         </td>

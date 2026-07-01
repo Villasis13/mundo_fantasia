@@ -80,10 +80,18 @@ class RegistroVentas extends Component
             ->select(
                 'v.id_venta', 'v.venta_tipo', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_fecha',
                 'v.venta_totalgravada', 'v.venta_totalexonerada', 'v.venta_totalinafecta',
-                'v.venta_totaldescuento', 'v.venta_total', 'v.id_formas_pago',
+                'v.venta_totaldescuento', 'v.venta_total', 'v.id_formas_pago', 'v.venta_estado_sunat',
+                'v.anulado_sunat',
                 'c.cliente_nombre', 'c.cliente_razonsocial', 'c.cliente_numero', 'c.id_tipo_documento',
                 'u.nombre_users',
-                'mo.abreviado as moneda_abrev', 'mo.simbolo as moneda_simbolo'
+                'mo.abreviado as moneda_abrev', 'mo.simbolo as moneda_simbolo',
+                DB::raw("(CASE WHEN v.anulado_sunat = 1 OR EXISTS (
+                    SELECT 1 FROM ventas nc
+                    WHERE nc.venta_tipo = '07'
+                      AND nc.serie_modificar = v.venta_serie
+                      AND nc.correlativo_modificar = v.venta_correlativo
+                      AND nc.id_empresa = v.id_empresa
+                ) THEN 1 ELSE 0 END) as tiene_nc")
             )
             ->orderByDesc('v.id_venta');
     }
