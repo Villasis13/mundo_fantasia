@@ -102,6 +102,19 @@ class NotaElectronica extends Component
         $this->direccionCliente = (string) ($venta->cliente_direccion ?? '');
 
         $this->cargarItemsVenta();
+
+        // Preselección vía query string (ej. botón "Nota de crédito por anulación" del Registro de Ventas)
+        // ?tipo=07&motivo=01  → Crédito + Anulación de la operación
+        $tipoQ   = request()->query('tipo');
+        $motivoQ = request()->query('motivo');
+        if ($tipoQ && in_array($tipoQ, ['07', '08'])) {
+            $this->tipoNota = (string) $tipoQ;
+            $this->cargarSeries();
+            $this->cargarMotivos();
+            if ($motivoQ) {
+                $this->motivoNota = (string) $motivoQ;
+            }
+        }
     }
 
     // =========================================================

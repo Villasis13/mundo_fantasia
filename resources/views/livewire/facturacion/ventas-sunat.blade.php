@@ -216,13 +216,13 @@
                             @if($al->venta_tipo_envio == 1)
                                 <td>DIRECTO</td>
                             @else
-                                <td>
+                                {{--<td>
                                     <a href="{{ route('facturacion.detalle_resumen', $al->resumen->id_envio_resumen) }}"
                                        data-bs-tooltip="tooltip" data-bs-placement="top"
                                        data-bs-title="Ver Resumen Diario" target="_blank">
                                         RESUMEN DIARIO
                                     </a>
-                                </td>
+                                </td>--}}
                             @endif
 
                             <td>

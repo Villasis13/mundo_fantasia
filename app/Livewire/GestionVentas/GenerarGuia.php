@@ -254,6 +254,12 @@ class GenerarGuia extends Component
             ->leftJoin('ventas_anulados as va', 'va.id_venta', '=', 'v.id_venta')
             ->whereNull('va.id_venta')
             ->whereIn('v.venta_tipo', ['01', '03', '20'])
+            // Solo ventas que aún NO están vinculadas a una guía (activa)
+            ->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))->from('guias_remision as gx')
+                    ->whereColumn('gx.id_venta', 'v.id_venta')
+                    ->where('gx.guia_estado', '!=', 0);
+            })
             ->select(
                 'v.id_venta', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_total', 'v.id_clientes',
                 'v.venta_tipo', 'v.venta_fecha',
@@ -266,7 +272,9 @@ class GenerarGuia extends Component
 
         if ($ventas->isEmpty()) {
             $this->factResultados = [];
-            $this->factMensaje = 'No se encontraron facturas con esos datos.';
+            $this->factMensaje = ($serie !== '' || $corr !== '')
+                ? 'No se encontraron facturas con esos datos.'
+                : 'No hay ventas pendientes de vincular.';
             return;
         }
 
@@ -285,6 +293,15 @@ class GenerarGuia extends Component
             'cliente_nombre'    => $v->cliente_razonsocial ?: $v->cliente_nombre,
             'cliente_direccion' => $v->cliente_direccion ?? '',
         ])->toArray();
+    }
+
+    public function cargarFacturasIniciales(): void
+    {
+        // Al abrir el modal: mostrar las últimas 5 ventas sin vincular (sin filtros)
+        $this->factSerie = '';
+        $this->factCorrelativo = '';
+        $this->factMensaje = '';
+        $this->buscarFactura();
     }
 
     public function vincularFactura($idVenta = 0): void
@@ -435,7 +452,11 @@ class GenerarGuia extends Component
             $numeroMostrar = $serie . '-' . str_pad((string) $correlativo, 8, '0', STR_PAD_LEFT);
             session()->flash('success', "Guía {$numeroMostrar} registrada correctamente.");
             $this->resetFormulario();
-            $this->dispatch('abrirEnlaces', url: route('Gestionventas.imprimir_guia_pdf', ['id_guia' => $idGuia]));
+            // 1) limpia formulario  2) abre el PDF en pestaña nueva  3) redirige al listado
+            $this->dispatch('guiaGuardada',
+                pdf:   route('Gestionventas.imprimir_guia_pdf', ['id_guia' => $idGuia]),
+                lista: route('Gestionventas.guias_remision')
+            );
         } catch (\Exception $e) {
             DB::rollBack();
             $this->logs->insertarLog($e);

@@ -514,7 +514,7 @@
                                 </thead>
                                 <tbody>
                                     @forelse($ventasResumen as $vr)
-                                    <tr>
+                                    <tr @if($vr->tiene_nc ?? 0) style="background-color:#f8d7da;" @endif>
                                         <td class="ps-3 py-3">
                                             <span class="fw-bold">{{ $vr->venta_serie }}-{{ (int) $vr->venta_correlativo }}</span>
                                         </td>
@@ -540,6 +540,7 @@
                                                         <i class="fa-solid fa-print"></i>
                                                     </span>
                                                 </button>
+                                                @if(!($vr->tiene_nc ?? 0))
                                                 <button type="button"
                                                         class="btn btn-outline-warning"
                                                         title="Rectificar datos"
@@ -553,6 +554,13 @@
                                                         <i class="fa-solid fa-pen"></i>
                                                     </span>
                                                 </button>
+                                                <button type="button"
+                                                        class="btn btn-outline-danger"
+                                                        title="Anular venta (genera Nota de Crédito)"
+                                                        wire:click="confirmarAnularVenta({{ $vr->id_venta }})">
+                                                    <i class="fa-solid fa-ban"></i>
+                                                </button>
+                                                @endif
                                             </div>
                                         </td>
                                     </tr>
@@ -1319,6 +1327,34 @@
     @endif {{-- /despachar --}}
 
     {{-- ══════════════════════════════════════════════════════
+         MODAL — Confirmar Anular Venta
+    ══════════════════════════════════════════════════════════ --}}
+    <div class="modal fade" id="modalAnularVenta" wire:ignore.self tabindex="-1" aria-hidden="true"
+         data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:440px;">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header border-bottom py-3" style="background:#fff5f5;">
+                    <h5 class="modal-title fw-bold mb-0" style="color:#dc3545;font-size:15px;">
+                        <i class="fa-solid fa-ban me-2"></i>Anular Venta
+                    </h5>
+                </div>
+                <div class="modal-body px-4 py-3">
+                    <p class="mb-0" style="font-size:14px;">¿Anular esta venta? Se generará automáticamente una Nota de Crédito por anulación de la operación.</p>
+                </div>
+                <div class="modal-footer border-top-0 pt-0 pb-3 px-4 gap-2">
+                    <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger px-4 fw-semibold"
+                            wire:click="anularVenta"
+                            wire:loading.attr="disabled" wire:target="anularVenta">
+                        <span wire:loading wire:target="anularVenta"><span class="spinner-border spinner-border-sm me-1"></span>Anulando...</span>
+                        <span wire:loading.remove wire:target="anularVenta"><i class="fa-solid fa-ban me-1"></i>Sí, anular</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ══════════════════════════════════════════════════════
          MODAL — Rectifica Datos de Comprobante
     ══════════════════════════════════════════════════════════ --}}
     <div class="modal fade" id="modalRectificarComprobante" wire:ignore.self tabindex="-1" aria-hidden="true"
@@ -1514,6 +1550,14 @@
         const m = document.getElementById('modalConfirmCierre');
         if (m) bootstrap.Modal.getOrCreateInstance(m).hide();
         // El listener hidden.bs.modal se encarga de reabrir el modal principal
+    });
+
+    $wire.on('abrirModalAnularVenta', () => {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAnularVenta')).show();
+    });
+    $wire.on('cerrarModalAnularVenta', () => {
+        const m = bootstrap.Modal.getInstance(document.getElementById('modalAnularVenta'));
+        if (m) m.hide();
     });
 
     $wire.on('abrirComprobanteCaja', ({ idVenta }) => {

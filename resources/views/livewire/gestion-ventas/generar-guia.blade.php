@@ -24,7 +24,8 @@
                 <button type="button" class="btn-close btn-close-white ms-2" wire:click="desvincularFactura"></button>
             </span>
         @else
-            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalFacturaGuia">
+            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalFacturaGuia"
+                    wire:click="cargarFacturasIniciales">
                 <i class="fa-solid fa-link me-1"></i>Vincular factura
             </button>
         @endif
@@ -327,6 +328,12 @@
             Livewire.on('abrirEnlaces', (e) => { const d = Array.isArray(e) ? e[0] : e; if (d && d.url) window.open(d.url, '_blank'); });
             Livewire.on('cerrarModalFacturaGuia', () => { const m = bootstrap.Modal.getInstance(document.getElementById('modalFacturaGuia')); if (m) m.hide(); });
             Livewire.on('cerrarModalClienteGuia', () => { const m = bootstrap.Modal.getInstance(document.getElementById('modalClienteGuia')); if (m) m.hide(); });
+            // Tras registrar: abrir PDF en pestaña nueva y redirigir al listado
+            Livewire.on('guiaGuardada', (e) => {
+                const d = Array.isArray(e) ? e[0] : e;
+                if (d && d.pdf) window.open(d.pdf, '_blank');
+                if (d && d.lista) setTimeout(() => { window.location.href = d.lista; }, 400);
+            });
         });
     </script>
 </div>

@@ -1043,6 +1043,160 @@ class Caja extends Component
         $this->dispatch('abrirComprobanteCaja', idVenta: $idVenta);
     }
 
+    // ── Anular venta: genera automáticamente una Nota de Crédito (motivo 01 - anulación) ──
+    public ?int $idAnularVenta = null;
+
+    public function confirmarAnularVenta(int $idVenta): void
+    {
+        $this->idAnularVenta = $idVenta;
+        $this->dispatch('abrirModalAnularVenta');
+    }
+
+    public function anularVenta(): void
+    {
+        $idVenta = (int) $this->idAnularVenta;
+        if (!$idVenta) { $this->dispatch('cerrarModalAnularVenta'); return; }
+
+        if (!auth()->user()->can('caja_pedidos.crear')) {
+            $this->dispatch('cerrarModalAnularVenta');
+            session()->flash('error', 'No tienes permiso para anular ventas.');
+            return;
+        }
+
+        $venta = DB::table('ventas')->where('id_venta', $idVenta)->first();
+        if (!$venta) {
+            $this->dispatch('cerrarModalAnularVenta');
+            session()->flash('error', 'Venta no encontrada.');
+            return;
+        }
+        if ((int) $venta->anulado_sunat === 1) {
+            $this->dispatch('cerrarModalAnularVenta');
+            session()->flash('error', 'La venta ya se encuentra anulada.');
+            return;
+        }
+        if (!in_array($venta->venta_tipo, ['01', '03'])) {
+            $this->dispatch('cerrarModalAnularVenta');
+            session()->flash('error', 'Solo se pueden anular facturas o boletas con Nota de Crédito.');
+            return;
+        }
+
+        // Serie de Nota de Crédito (07): índice 0 = Factura, 1 = Boleta
+        $seriesNc = Serie::where('id_empresa', $venta->id_empresa)
+            ->where('tipocomp', '07')->where('estado', 1)->orderBy('id_serie')->get();
+        $indice   = $venta->venta_tipo === '03' ? 1 : 0;
+        $infoSerie = $seriesNc->values()->get($indice);
+
+        // LOG de diagnóstico
+        \Illuminate\Support\Facades\Log::info('ANULAR_VENTA debug', [
+            'id_venta'        => $idVenta,
+            'venta_tipo'      => $venta->venta_tipo,
+            'id_empresa'      => $venta->id_empresa,
+            'indice_buscado'  => $indice,
+            'series07_count'  => $seriesNc->count(),
+            'series07'        => $seriesNc->map(fn($s) => [
+                'id_serie' => $s->id_serie, 'serie' => $s->serie,
+                'tipocomp' => $s->tipocomp, 'id_empresa' => $s->id_empresa, 'estado' => $s->estado,
+            ])->toArray(),
+            'todas_tipocomp_distintas' => Serie::select('tipocomp')->distinct()->pluck('tipocomp')->toArray(),
+        ]);
+
+        if (!$infoSerie) {
+            $this->dispatch('cerrarModalAnularVenta');
+            session()->flash('error', 'No hay serie de Nota de Crédito configurada para este tipo de comprobante. (Empresa: ' . $venta->id_empresa . ', tipo: ' . $venta->venta_tipo . ', series 07 encontradas: ' . $seriesNc->count() . ')');
+            return;
+        }
+
+        DB::beginTransaction();
+        try {
+            // 1) Crear la Nota de Crédito en ventas (venta_tipo 07, motivo 01)
+            $nota                           = new Ventas();
+            $nota->id_caja                  = $venta->id_caja;
+            $nota->id_caja_numero           = $venta->id_caja_numero;
+            $nota->id_empresa               = $venta->id_empresa;
+            $nota->id_sucursal              = $venta->id_sucursal;
+            $nota->id_users                 = auth()->user()->id_users;
+            $nota->id_clientes              = $venta->id_clientes;
+            $nota->id_moneda                = $venta->id_moneda ?: 1;
+            $nota->venta_tipo_campo         = 0;
+            $nota->venta_condicion_resumen  = 1;
+            $nota->venta_tipo_envio         = 0;
+            $nota->venta_tipo               = '07';
+            $nota->venta_serie              = $infoSerie->serie;
+            $nota->venta_correlativo        = $infoSerie->correlativo + 1;
+            $nota->venta_totalgratuita      = $venta->venta_totalgratuita;
+            $nota->venta_totalexonerada     = $venta->venta_totalexonerada;
+            $nota->venta_totalinafecta      = $venta->venta_totalinafecta;
+            $nota->venta_totalgravada       = $venta->venta_totalgravada;
+            $nota->venta_totaligv           = $venta->venta_totaligv;
+            $nota->venta_incluye_igv        = 1;
+            $nota->venta_porcentaje_igv     = $venta->venta_porcentaje_igv;
+            $nota->venta_totaldescuento     = $venta->venta_totaldescuento;
+            $nota->venta_icbper             = $venta->venta_icbper;
+            $nota->venta_total              = $venta->venta_total;
+            $nota->venta_pago_cliente       = $venta->venta_total;
+            $nota->venta_vuelto             = 0;
+            $nota->venta_fecha              = now()->format('Y-m-d H:i:s');
+            $nota->tipo_documento_modificar = $venta->venta_tipo;
+            $nota->serie_modificar          = $venta->venta_serie;
+            $nota->correlativo_modificar    = $venta->venta_correlativo;
+            $nota->venta_codigo_motivo_nota = '01'; // Anulación de la operación
+            $nota->venta_estado_sunat       = 0;
+            $nota->id_formas_pago           = 1;
+            $nota->venta_estado_pago        = 2;
+            $nota->venta_codigo             = microtime(true);
+            $nota->save();
+            $idNota = $nota->id_venta;
+
+            // 2) Actualizar correlativo de la serie
+            Serie::where('id_serie', $infoSerie->id_serie)
+                ->update(['correlativo' => $infoSerie->correlativo + 1]);
+
+            // 3) Copiar el detalle de la venta a la nota de crédito
+            $detalle = DB::table('ventas_detalle')->where('id_venta', $idVenta)->get();
+            foreach ($detalle as $d) {
+                $det                               = new Venta_detalle();
+                $det->id_venta                     = $idNota;
+                $det->id_pro                       = $d->id_pro;
+                $det->venta_detalle_precio_ref      = $d->venta_detalle_precio_ref;
+                $det->venta_detalle_valor_unitario  = $d->venta_detalle_valor_unitario;
+                $det->venta_detalle_precio_unitario = $d->venta_detalle_precio_unitario;
+                $det->venta_detalle_nombre_producto = $d->venta_detalle_nombre_producto;
+                $det->pres_nombre                   = $d->pres_nombre ?? null;
+                $det->pres_factor                   = $d->pres_factor ?? 1;
+                $det->venta_detalle_cantidad        = $d->venta_detalle_cantidad;
+                $det->venta_detalle_total_igv       = $d->venta_detalle_total_igv;
+                $det->venta_detalle_porcentaje_igv  = $d->venta_detalle_porcentaje_igv;
+                $det->venta_detalle_total_icbper    = $d->venta_detalle_total_icbper;
+                $det->venta_detalle_valor_total     = $d->venta_detalle_valor_total;
+                $det->venta_detalle_importe_total   = $d->venta_detalle_importe_total;
+                $det->save();
+            }
+
+            // 4) Marcar la venta original como anulada
+            DB::table('ventas')->where('id_venta', $idVenta)->update([
+                'anulado_sunat' => 1,
+                'venta_cancelar' => 0,
+                'updated_at'     => now(),
+            ]);
+
+            // 5) Devolver el stock de la venta anulada
+            $detalleOriginal = (new Ventas())->listar_venta_detalle_x_id_venta($idVenta);
+            (new General())->actualizarStockPorDetalle($detalleOriginal, 'sumar', $venta->id_sucursal);
+
+            DB::commit();
+            $this->idAnularVenta = null;
+            $this->cargarVentasResumen();
+            $this->dispatch('cerrarModalAnularVenta');
+            $numNota = $infoSerie->serie . '-' . str_pad((string)($infoSerie->correlativo + 1), 8, '0', STR_PAD_LEFT);
+            session()->flash('successCaja', 'Venta anulada. Nota de Crédito ' . $numNota . ' generada por anulación de la operación.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->logs->insertarLog($e);
+            $this->dispatch('cerrarModalAnularVenta');
+            session()->flash('error', 'Error al anular la venta: ' . $e->getMessage());
+        }
+    }
+
     private function limpiarDespacho(): void
     {
         $this->idPedidoPendienteDespacho = null;
@@ -1287,6 +1441,8 @@ class Caja extends Component
             ->leftJoin('clientes as c', 'c.id_clientes', '=', 'v.id_clientes')
             ->where('v.id_caja', $this->idCaja)
             ->whereNull('va.id_venta')
+            // Solo ventas (no notas de crédito/débito)
+            ->whereIn('v.venta_tipo', ['01', '03', '20'])
             ->orderBy('v.id_venta', 'desc')
             ->select(
                 'v.id_venta',
@@ -1298,9 +1454,18 @@ class Caja extends Component
                 'v.venta_correlativo',
                 'v.venta_tipo',
                 'v.venta_total',
+                'v.anulado_sunat',
                 'v.created_at',
                 DB::raw("COALESCE(c.cliente_razonsocial, c.cliente_nombre, 'Sin cliente') as cliente_nombre"),
-                DB::raw("COALESCE(c.cliente_numero, '') as cliente_doc")
+                DB::raw("COALESCE(c.cliente_numero, '') as cliente_doc"),
+                // Tiene NC si está anulada o existe una NC '07' que la modifica
+                DB::raw("(CASE WHEN v.anulado_sunat = 1 OR EXISTS (
+                    SELECT 1 FROM ventas nc
+                    WHERE nc.venta_tipo = '07'
+                      AND nc.serie_modificar = v.venta_serie
+                      AND nc.correlativo_modificar = v.venta_correlativo
+                      AND nc.id_empresa = v.id_empresa
+                ) THEN 1 ELSE 0 END) as tiene_nc")
             )
             ->get()
             ->toArray();

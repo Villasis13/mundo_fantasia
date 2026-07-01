@@ -138,6 +138,12 @@
                                             <span wire:loading wire:target="abrirRectificar({{ $vta->id_venta }})"><span class="spinner-border spinner-border-sm"></span></span>
                                         </button>
                                         @endcan
+                                        @can('generar_nota.listar')
+                                        <a href="{{ route('facturacion.generar_nota', ['id' => $vta->id_venta, 'tipo' => '07', 'motivo' => '01']) }}"
+                                           class="btn btn-sm btn-outline-danger" title="Nota de Crédito por anulación de la operación">
+                                            <i class="fa-solid fa-file-circle-minus"></i>
+                                        </a>
+                                        @endcan
                                     </div>
                                 </td>
                             </tr>
