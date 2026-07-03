@@ -39,11 +39,11 @@
                     <input type="text" class="form-control form-control-sm" wire:model.live.debounce.400ms="filtroCliente" placeholder="Nombre o doc.">
                 </div>
                 <div class="col-12 col-md-2">
-                    <label class="form-label small fw-semibold mb-1">Vendedor</label>
-                    <select class="form-select form-select-sm" wire:model.live="filtroVendedor">
+                    <label class="form-label small fw-semibold mb-1">Punto de venta</label>
+                    <select class="form-select form-select-sm" wire:model.live="filtroPuntoVenta">
                         <option value="0">Todos</option>
-                        @foreach($vendedores as $v)
-                            <option value="{{ $v->id_users }}">{{ $v->nombre_users }}</option>
+                        @foreach($puntosVenta as $pv)
+                            <option value="{{ $pv->id_users }}">{{ $pv->nombre_users }}</option>
                         @endforeach
                     </select>
                 </div>

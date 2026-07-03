@@ -1,4 +1,4 @@
-<div class="container-fluid py-3" style="max-width:1080px;">
+<div class="container-fluid py-3">
 
     @if(session('success'))
         <div class="alert alert-success alert-dismissible d-flex align-items-center gap-2 mb-3">
@@ -32,29 +32,31 @@
     </div>
 
     {{-- ════════ UN SOLO CARD, BLOQUES SIN TÍTULOS ════════ --}}
-    <div class="card border-0 shadow-sm mb-5">
+    <div class="card border-0 shadow-sm mb-3">
         <div class="card-body">
 
+            <div class="row g-4">
+            <div class="col-lg-6">
             {{-- Bloque: datos de la guía --}}
             <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Serie</label>
+                    <label class="form-label small fw-semibold text-secondary">Serie</label>
                     <input type="text" class="form-control form-control-sm fw-bold text-primary" value="{{ $this->serie }}" disabled>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">N.º de guía</label>
+                    <label class="form-label small fw-semibold text-secondary">N.º de guía</label>
                     <input type="text" class="form-control form-control-sm" value="{{ str_pad($nextNumero, 8, '0', STR_PAD_LEFT) }}" disabled>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Fecha de emisión <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Fecha de emisión <span class="text-danger">*</span></label>
                     <input type="date" class="form-control form-control-sm @error('guiaEmision') is-invalid @enderror" wire:model="guiaEmision">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Fecha de traslado <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Fecha de traslado <span class="text-danger">*</span></label>
                     <input type="date" class="form-control form-control-sm @error('guiaTraslado') is-invalid @enderror" wire:model="guiaTraslado">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Motivo <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Motivo <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm" wire:model="guiaMotivo">
                         <option value="01">01 – Venta</option>
                         <option value="02">02 – Compra</option>
@@ -66,7 +68,7 @@
                     </select>
                 </div>
                 <div class="col-md-8">
-                    <label class="form-label small fw-semibold">Observación</label>
+                    <label class="form-label small fw-semibold text-secondary">Observación</label>
                     <input type="text" class="form-control form-control-sm" wire:model="guiaObservacion">
                 </div>
             </div>
@@ -76,11 +78,11 @@
             {{-- Bloque: salida y llegada --}}
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Dirección de salida <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Dirección de salida <span class="text-danger">*</span></label>
                     <input type="text" class="form-control form-control-sm @error('dirPartida') is-invalid @enderror" wire:model="dirPartida">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Ubigeo salida <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Ubigeo salida <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm @error('ubigeoPartida') is-invalid @enderror" wire:model="ubigeoPartida">
                         <option value="">— Seleccionar ubigeo —</option>
                         @foreach($ubigeos as $u)
@@ -89,11 +91,11 @@
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Dirección de llegada <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Dirección de llegada <span class="text-danger">*</span></label>
                     <input type="text" class="form-control form-control-sm @error('dirLlegada') is-invalid @enderror" wire:model="dirLlegada">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Ubigeo llegada <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Ubigeo llegada <span class="text-danger">*</span></label>
                     <select class="form-select form-select-sm @error('ubigeoLlegada') is-invalid @enderror" wire:model="ubigeoLlegada">
                         <option value="">— Seleccionar ubigeo —</option>
                         @foreach($ubigeos as $u)
@@ -103,37 +105,37 @@
                 </div>
             </div>
 
-            <hr class="my-4">
-
+            </div>{{-- /col izquierda --}}
+            <div class="col-lg-6">
             {{-- Bloque: cliente / destinatario --}}
-            <div class="d-flex justify-content-end mb-2">
-                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalClienteGuia">
-                    <i class="fa-solid fa-magnifying-glass me-1"></i>Buscar cliente
-                </button>
-            </div>
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Cliente <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control form-control-sm @error('cliNombre') is-invalid @enderror" wire:model="cliNombre">
+                    <label class="form-label small fw-semibold text-secondary">Cliente <span class="text-danger">*</span></label>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control @error('cliNombre') is-invalid @enderror" wire:model="cliNombre">
+                        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalClienteGuia" title="Buscar cliente">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">N.º documento</label>
+                    <label class="form-label small fw-semibold text-secondary">N.º documento</label>
                     <input type="text" class="form-control form-control-sm" maxlength="15" wire:model.live.debounce.600ms="cliNumDoc">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Dirección fiscal</label>
+                    <label class="form-label small fw-semibold text-secondary">Dirección fiscal</label>
                     <input type="text" class="form-control form-control-sm" wire:model="cliDireccion">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Distrito</label>
+                    <label class="form-label small fw-semibold text-secondary">Distrito</label>
                     <input type="text" class="form-control form-control-sm" wire:model="cliDistrito">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Provincia</label>
+                    <label class="form-label small fw-semibold text-secondary">Provincia</label>
                     <input type="text" class="form-control form-control-sm" wire:model="cliProvincia">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Departamento</label>
+                    <label class="form-label small fw-semibold text-secondary">Departamento</label>
                     <input type="text" class="form-control form-control-sm" wire:model="cliDepartamento">
                 </div>
             </div>
@@ -143,16 +145,16 @@
             {{-- Bloque: carga --}}
             <div class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Peso bruto (Kg) <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Peso bruto (Kg) <span class="text-danger">*</span></label>
                     <input type="number" step="0.001" min="0" class="form-control form-control-sm" wire:model="pesoBruto">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Cantidad de bultos</label>
+                    <label class="form-label small fw-semibold text-secondary">Cantidad de bultos</label>
                     <input type="number" min="0" class="form-control form-control-sm" wire:model="nroBultos">
                 </div>
                 @if($idVenta)
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Documentos Relacionados</label>
+                    <label class="form-label small fw-semibold text-secondary">Documentos Relacionados</label>
                     <input type="text" class="form-control form-control-sm fw-semibold text-success" value="{{ $facturaVinculada }}" disabled>
                 </div>
                 @endif
@@ -163,34 +165,40 @@
             {{-- Bloque: transporte --}}
             <div class="row g-3">
                 <div class="col-md-5">
-                    <label class="form-label small fw-semibold">Empresa transportista</label>
+                    <label class="form-label small fw-semibold text-secondary">Empresa transportista</label>
                     <input type="text" class="form-control form-control-sm" wire:model="transNombre">
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small fw-semibold">Marca</label>
+                    <label class="form-label small fw-semibold text-secondary">Marca</label>
                     <input type="text" class="form-control form-control-sm" wire:model="vehMarca">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Placa(s) <span class="text-danger">*</span></label>
+                    <label class="form-label small fw-semibold text-secondary">Placa(s) <span class="text-danger">*</span></label>
                     <input type="text" class="form-control form-control-sm text-uppercase @error('vehPlaca') is-invalid @enderror" maxlength="20" wire:model="vehPlaca" placeholder="ABC-123">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">Licencia de conducir</label>
+                    <label class="form-label small fw-semibold text-secondary">Licencia de conducir</label>
                     <input type="text" class="form-control form-control-sm" maxlength="12" wire:model="condLicencia">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold">DNI chofer</label>
+                    <label class="form-label small fw-semibold text-secondary">DNI chofer</label>
                     <input type="text" class="form-control form-control-sm" maxlength="15" wire:model="condNumDoc">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label small fw-semibold">Nombre del chofer</label>
+                    <label class="form-label small fw-semibold text-secondary">Nombre del chofer</label>
                     <input type="text" class="form-control form-control-sm" wire:model="condNombre">
                 </div>
             </div>
+            </div>{{-- /col derecha --}}
+            </div>{{-- /row 2 columnas --}}
 
-            <hr class="my-4">
+        </div>
+    </div>{{-- /card 1: datos --}}
 
-            {{-- Bloque: bienes a trasladar (mismo card) --}}
+    {{-- ════════ CARD 2: BIENES A TRASLADAR ════════ --}}
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body">
+            {{-- Bloque: bienes a trasladar --}}
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-semibold small text-muted text-uppercase" style="letter-spacing:.04em;">Bienes a trasladar</span>
                 <button type="button" class="btn btn-sm btn-outline-primary" wire:click="agregarItemManual"><i class="fa-solid fa-plus me-1"></i>Agregar ítem</button>

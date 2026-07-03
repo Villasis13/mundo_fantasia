@@ -18,7 +18,7 @@ class RegistroVentas extends Component
     public string $filtroSerie    = '';
     public string $filtroNumero   = '';
     public string $filtroCliente  = '';
-    public int    $filtroVendedor = 0;
+    public int    $filtroPuntoVenta = 0;
     public int    $porPagina      = 20;
 
     // ── Tipos de pago (para rectificar) ───────────────────────
@@ -55,8 +55,8 @@ class RegistroVentas extends Component
     public function updatedFiltroHasta(): void    { $this->resetPage(); }
     public function updatedFiltroSerie(): void    { $this->resetPage(); }
     public function updatedFiltroNumero(): void   { $this->resetPage(); }
-    public function updatedFiltroCliente(): void  { $this->resetPage(); }
-    public function updatedFiltroVendedor(): void { $this->resetPage(); }
+    public function updatedFiltroCliente(): void    { $this->resetPage(); }
+    public function updatedFiltroPuntoVenta(): void { $this->resetPage(); }
     public function updatingPorPagina(): void     { $this->resetPage(); }
 
     private function baseQuery()
@@ -76,7 +76,7 @@ class RegistroVentas extends Component
                 $w->where('c.cliente_nombre', 'like', '%' . $this->filtroCliente . '%')
                   ->orWhere('c.cliente_razonsocial', 'like', '%' . $this->filtroCliente . '%')
                   ->orWhere('c.cliente_numero', 'like', '%' . $this->filtroCliente . '%')))
-            ->when($this->filtroVendedor > 0, fn($q) => $q->where('v.id_users', $this->filtroVendedor))
+            ->when($this->filtroPuntoVenta > 0, fn($q) => $q->where('v.id_users', $this->filtroPuntoVenta))
             ->select(
                 'v.id_venta', 'v.venta_tipo', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_fecha',
                 'v.venta_totalgravada', 'v.venta_totalexonerada', 'v.venta_totalinafecta',
@@ -244,9 +244,16 @@ class RegistroVentas extends Component
             }
         }
 
-        $vendedores = DB::table('users')->where('users_estado', 1)
-            ->orderBy('nombre_users')->get(['id_users', 'nombre_users']);
+        // Puntos de venta = usuarios con rol Ventas (role 5)
+        $puntosVenta = DB::table('users as u')
+            ->join('model_has_roles as mr', 'mr.model_id', '=', 'u.id_users')
+            ->where('mr.role_id', 5)
+            ->where('u.users_estado', 1)
+            ->orderBy('u.nombre_users')
+            ->select('u.id_users', 'u.nombre_users')
+            ->distinct()
+            ->get();
 
-        return view('livewire.gestion-ventas.registro-ventas', compact('ventas', 'pagosPorVenta', 'vendedores'));
+        return view('livewire.gestion-ventas.registro-ventas', compact('ventas', 'pagosPorVenta', 'puntosVenta'));
     }
 }
