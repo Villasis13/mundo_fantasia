@@ -22,7 +22,7 @@
                 <i class="fa-solid fa-user text-muted" style="font-size:.78rem"></i>
             </span>
             <input type="text"
-                   wire:model.live="username"
+                   wire:model.live.debounce.300ms="username"
                    id="username"
                    class="form-control border-start-0 ps-1 @error('username') is-invalid @enderror"
                    placeholder="Nombre de usuario"

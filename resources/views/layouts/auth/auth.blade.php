@@ -164,6 +164,18 @@
     <script src="{{ asset('js/domain.js') }}"></script>
 
     @livewireScripts
+    <script>
+        document.addEventListener('livewire:init', () => {
+            Livewire.hook('request', ({ fail }) => {
+                fail(({ status, preventDefault }) => {
+                    if (status === 419) {
+                        preventDefault();
+                        window.location.reload();
+                    }
+                });
+            });
+        });
+    </script>
     @stack('scripts')
 </body>
 </html>
