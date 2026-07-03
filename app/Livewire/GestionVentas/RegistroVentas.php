@@ -19,10 +19,15 @@ class RegistroVentas extends Component
     public string $filtroNumero   = '';
     public string $filtroCliente  = '';
     public int    $filtroPuntoVenta = 0;
+    public string $filtroEstado   = '';
     public int    $porPagina      = 20;
 
     // ── Tipos de pago (para rectificar) ───────────────────────
     public array $tiposPago = [];
+
+    // ── Ver detalle ───────────────────────────────────────────
+    public ?array $detalle       = null;
+    public array  $detalleItems  = [];
 
     // ── Rectificar comprobante ────────────────────────────────
     public int   $rectVentaId    = 0;
@@ -57,6 +62,7 @@ class RegistroVentas extends Component
     public function updatedFiltroNumero(): void   { $this->resetPage(); }
     public function updatedFiltroCliente(): void    { $this->resetPage(); }
     public function updatedFiltroPuntoVenta(): void { $this->resetPage(); }
+    public function updatedFiltroEstado(): void     { $this->resetPage(); }
     public function updatingPorPagina(): void     { $this->resetPage(); }
 
     private function baseQuery()
@@ -77,6 +83,21 @@ class RegistroVentas extends Component
                   ->orWhere('c.cliente_razonsocial', 'like', '%' . $this->filtroCliente . '%')
                   ->orWhere('c.cliente_numero', 'like', '%' . $this->filtroCliente . '%')))
             ->when($this->filtroPuntoVenta > 0, fn($q) => $q->where('v.id_users', $this->filtroPuntoVenta))
+            ->when($this->filtroEstado !== '', function ($q) {
+                $ncSql = "(v.anulado_sunat = 1 OR EXISTS (
+                    SELECT 1 FROM ventas nc
+                    WHERE nc.venta_tipo = '07'
+                      AND nc.serie_modificar = v.venta_serie
+                      AND nc.correlativo_modificar = v.venta_correlativo
+                      AND nc.id_empresa = v.id_empresa))";
+                if ($this->filtroEstado === 'anulado') {
+                    $q->whereRaw($ncSql);
+                } elseif ($this->filtroEstado === 'enviado') {
+                    $q->whereRaw("NOT $ncSql")->where('v.venta_estado_sunat', 1);
+                } elseif ($this->filtroEstado === 'pendiente') {
+                    $q->whereRaw("NOT $ncSql")->where('v.venta_estado_sunat', 0);
+                }
+            })
             ->select(
                 'v.id_venta', 'v.venta_tipo', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_fecha',
                 'v.venta_totalgravada', 'v.venta_totalexonerada', 'v.venta_totalinafecta',
@@ -100,6 +121,78 @@ class RegistroVentas extends Component
     public function reimprimir(int $idVenta): void
     {
         $this->dispatch('abrirComprobanteCaja', idVenta: $idVenta);
+    }
+
+    // ── Ver detalle del comprobante ───────────────────────────
+    public function verDetalle(int $idVenta): void
+    {
+        $v = DB::table('ventas as v')
+            ->leftJoin('clientes as c', 'c.id_clientes', '=', 'v.id_clientes')
+            ->leftJoin('tipo_documento as td', 'td.id_tipo_documento', '=', 'c.id_tipo_documento')
+            ->leftJoin('empresa as e', 'e.id_empresa', '=', 'v.id_empresa')
+            ->leftJoin('users as u', 'u.id_users', '=', 'v.id_users')
+            ->where('v.id_venta', $idVenta)
+            ->select(
+                'v.id_venta', 'v.venta_tipo', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_fecha',
+                'v.venta_totalgravada', 'v.venta_totalexonerada', 'v.venta_totalinafecta',
+                'v.venta_totaligv', 'v.venta_totaldescuento', 'v.venta_total', 'v.id_formas_pago',
+                'v.venta_estado_sunat', 'v.anulado_sunat',
+                'e.empresa_ruc', 'e.empresa_razon_social', 'e.empresa_domiciliofiscal',
+                'c.cliente_nombre', 'c.cliente_razonsocial', 'c.cliente_numero',
+                'td.tipo_documento_identidad',
+                'u.nombre_users'
+            )->first();
+
+        if (!$v) return;
+
+        $tipoLbl = ['01'=>'Factura','03'=>'Boleta','20'=>'Nota de Venta','07'=>'Nota de Crédito','08'=>'Nota de Débito'][$v->venta_tipo] ?? $v->venta_tipo;
+        $esEmpresa   = !empty($v->cliente_razonsocial);
+        $compradorNom = $esEmpresa ? $v->cliente_razonsocial : ($v->cliente_nombre ?: $v->cliente_razonsocial);
+
+        $this->detalle = [
+            'tipo'            => $tipoLbl,
+            'numero'          => $v->venta_serie . ' - ' . str_pad((string)$v->venta_correlativo, 8, '0', STR_PAD_LEFT),
+            'fecha'           => \Carbon\Carbon::parse($v->venta_fecha)->format('d/m/Y'),
+            'hora'            => \Carbon\Carbon::parse($v->venta_fecha)->format('H:i:s'),
+            'emisor_ruc'      => $v->empresa_ruc,
+            'emisor_razon'    => $v->empresa_razon_social,
+            'emisor_dom'      => $v->empresa_domiciliofiscal,
+            'comp_tipo_doc'   => $v->tipo_documento_identidad ?: '—',
+            'comp_num_doc'    => $v->cliente_numero,
+            'comp_razon'      => $compradorNom,
+            'condicion'       => $v->id_formas_pago == 2 ? 'Crédito' : 'Contado',
+            'vendedor'        => $v->nombre_users ?? '—',
+            'gravada'         => (float) $v->venta_totalgravada,
+            'exonerada'       => (float) $v->venta_totalexonerada,
+            'inafecta'        => (float) $v->venta_totalinafecta,
+            'igv'             => (float) $v->venta_totaligv,
+            'descuento'       => (float) $v->venta_totaldescuento,
+            'total'           => (float) $v->venta_total,
+        ];
+
+        $items = DB::table('ventas_detalle as vd')
+            ->leftJoin('productos as p', 'p.id_pro', '=', 'vd.id_pro')
+            ->leftJoin('medida as m', 'm.id_medida', '=', 'p.id_medida')
+            ->where('vd.id_venta', $idVenta)
+            ->select(
+                'vd.venta_detalle_cantidad as cantidad',
+                'vd.venta_detalle_nombre_producto as descripcion',
+                'vd.venta_detalle_valor_unitario as valor_unitario',
+                'vd.venta_detalle_precio_unitario as precio_unitario',
+                'p.pro_codigo as codigo',
+                'm.medida_nombre as um'
+            )->get();
+
+        $this->detalleItems = $items->map(fn($i) => [
+            'cantidad'  => (float) $i->cantidad,
+            'um'        => $i->um ?: 'UNIDAD',
+            'codigo'    => $i->codigo ?: '—',
+            'descripcion' => $i->descripcion ?: '—',
+            'precio'    => (float) ($i->precio_unitario ?: $i->valor_unitario),
+            'importe'   => (float) $i->cantidad * (float) ($i->precio_unitario ?: $i->valor_unitario),
+        ])->toArray();
+
+        $this->dispatch('abrirModalDetalle');
     }
 
     // ── Rectificar (editar) ───────────────────────────────────

@@ -47,6 +47,15 @@
                         @endforeach
                     </select>
                 </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label small fw-semibold mb-1">Estado</label>
+                    <select class="form-select form-select-sm" wire:model.live="filtroEstado">
+                        <option value="">Seleccionar</option>
+                        <option value="pendiente">Pendiente</option>
+                        <option value="anulado">Anulado</option>
+                        <option value="enviado">Enviado</option>
+                    </select>
+                </div>
             </div>
         </div>
     </div>
@@ -66,14 +75,10 @@
                         <tr>
                             <th class="ps-3">Comprobante</th>
                             <th>Fecha</th>
-                            <th>Hora</th>
                             <th>Cliente</th>
-                            <th>Vendedor</th>
-                            <th class="text-center">Moneda</th>
                             <th class="text-center">Condición</th>
                             <th>Tipo de pago</th>
-                            <th class="text-end">Subtotal</th>
-                            <th class="text-end">Descuento</th>
+                            <th class="text-center">Estado</th>
                             <th class="text-end">Total</th>
                             <th class="text-center pe-3">Acciones</th>
                         </tr>
@@ -92,13 +97,10 @@
                                     <span class="badge bg-light text-dark border ms-1">{{ $tipoLbl }}</span>
                                 </td>
                                 <td>{{ \Carbon\Carbon::parse($vta->venta_fecha)->format('d/m/Y') }}</td>
-                                <td>{{ \Carbon\Carbon::parse($vta->venta_fecha)->format('H:i:s') }}</td>
                                 <td>
                                     <div class="fw-semibold">{{ \Illuminate\Support\Str::limit($clienteNom, 28) }}</div>
                                     <div class="text-muted" style="font-size:.72rem;">{{ $vta->cliente_numero }}</div>
                                 </td>
-                                <td>{{ $vta->nombre_users ?? '—' }}</td>
-                                <td class="text-center">{{ $vta->moneda_abrev ?: ($vta->moneda_simbolo ?: 'PEN') }}</td>
                                 <td class="text-center">
                                     @if($vta->id_formas_pago == 2)
                                         <span class="badge bg-warning text-dark">Crédito</span>
@@ -119,11 +121,26 @@
                                         <span class="text-muted">—</span>
                                     @endif
                                 </td>
-                                <td class="text-end">S/ {{ number_format($subtotal, 2) }}</td>
-                                <td class="text-end text-danger">S/ {{ number_format($vta->venta_totaldescuento, 2) }}</td>
+                                <td class="text-center">
+                                    @if($vta->tiene_nc ?? 0)
+                                        <span class="badge bg-danger">Anulado por crédito</span>
+                                    @elseif(($vta->venta_estado_sunat ?? 0) == 1)
+                                        <span class="badge bg-success">Enviado</span>
+                                    @elseif($vta->venta_tipo == '20')
+                                        <span class="badge bg-secondary">Nuevo</span>
+                                    @else
+                                        <span class="badge bg-warning text-dark">Pendiente</span>
+                                    @endif
+                                </td>
                                 <td class="text-end fw-bold text-primary">S/ {{ number_format($vta->venta_total, 2) }}</td>
                                 <td class="text-center pe-3">
                                     <div class="d-flex gap-1 justify-content-center">
+                                        <button type="button" class="btn btn-sm btn-outline-info" title="Ver detalle"
+                                                wire:click="verDetalle({{ $vta->id_venta }})"
+                                                wire:loading.attr="disabled" wire:target="verDetalle({{ $vta->id_venta }})">
+                                            <span wire:loading.remove wire:target="verDetalle({{ $vta->id_venta }})"><i class="fa-solid fa-eye"></i></span>
+                                            <span wire:loading wire:target="verDetalle({{ $vta->id_venta }})"><span class="spinner-border spinner-border-sm"></span></span>
+                                        </button>
                                         <button type="button" class="btn btn-sm btn-outline-secondary" title="Imprimir comprobante"
                                                 wire:click="reimprimir({{ $vta->id_venta }})"
                                                 wire:loading.attr="disabled" wire:target="reimprimir({{ $vta->id_venta }})">
@@ -152,13 +169,115 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="12" class="text-center text-muted py-4"><i class="fa fa-inbox fa-2x d-block mb-2 opacity-50"></i>No se encontraron ventas con los filtros seleccionados.</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted py-4"><i class="fa fa-inbox fa-2x d-block mb-2 opacity-50"></i>No se encontraron ventas con los filtros seleccionados.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
         @if($ventas->hasPages())<div class="card-footer py-2">{{ $ventas->links() }}</div>@endif
+    </div>
+
+    {{-- ══════ MODAL VER DETALLE ══════ --}}
+    <div class="modal fade" id="modalDetalleVenta" wire:ignore.self tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header text-white" style="background:#1e3a8a;">
+                    <h6 class="modal-title fw-bold mb-0 text-white">
+                        <i class="fa-solid fa-file-invoice me-2"></i>{{ $detalle['tipo'] ?? 'Comprobante' }}
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0" style="background:#f8fafc;">
+                    @if($detalle)
+                    <div class="text-center fw-bold py-2 border-bottom" style="background:#e8eefb;color:#1e3a8a;letter-spacing:.05em;font-size:.85rem;">
+                        REPORTE DE COMPROBANTE ELECTRÓNICO
+                    </div>
+
+                    {{-- Datos del comprobante --}}
+                    <div class="px-3 pt-3">
+                        <div class="fw-bold text-primary border-bottom pb-1 mb-2" style="font-size:.82rem;">DATOS DEL COMPROBANTE</div>
+                        <div class="row g-2" style="font-size:.82rem;">
+                            <div class="col-md-6"><span class="text-muted">Tipo de comprobante:</span> <span class="fw-semibold">{{ $detalle['tipo'] }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">Número:</span> <span class="fw-semibold">{{ $detalle['numero'] }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">Fecha de emisión:</span> <span class="fw-semibold">{{ $detalle['fecha'] }} {{ $detalle['hora'] }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">Condición:</span> <span class="fw-semibold">{{ $detalle['condicion'] }}</span></div>
+                        </div>
+                    </div>
+
+                    {{-- Datos del emisor --}}
+                    <div class="px-3 pt-3">
+                        <div class="fw-bold text-primary border-bottom pb-1 mb-2" style="font-size:.82rem;">DATOS DEL EMISOR</div>
+                        <div class="row g-2" style="font-size:.82rem;">
+                            <div class="col-md-6"><span class="text-muted">RUC:</span> <span class="fw-semibold">{{ $detalle['emisor_ruc'] }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">Razón social:</span> <span class="fw-semibold">{{ $detalle['emisor_razon'] }}</span></div>
+                            <div class="col-12"><span class="text-muted">Domicilio fiscal:</span> <span class="fw-semibold">{{ $detalle['emisor_dom'] }}</span></div>
+                        </div>
+                    </div>
+
+                    {{-- Datos del comprador --}}
+                    <div class="px-3 pt-3">
+                        <div class="fw-bold text-primary border-bottom pb-1 mb-2" style="font-size:.82rem;">DATOS DEL COMPRADOR</div>
+                        <div class="row g-2" style="font-size:.82rem;">
+                            <div class="col-md-6"><span class="text-muted">Tipo documento:</span> <span class="fw-semibold">{{ $detalle['comp_tipo_doc'] }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">N.º de documento:</span> <span class="fw-semibold">{{ $detalle['comp_num_doc'] }}</span></div>
+                            <div class="col-12"><span class="text-muted">Razón social / Nombre:</span> <span class="fw-semibold">{{ $detalle['comp_razon'] }}</span></div>
+                        </div>
+                    </div>
+
+                    {{-- Detalle de productos --}}
+                    <div class="px-3 pt-3 pb-3">
+                        <div class="fw-bold text-primary border-bottom pb-1 mb-2" style="font-size:.82rem;">DETALLE</div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle mb-0 bg-white" style="font-size:.8rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="text-center" style="width:70px;">Cant.</th>
+                                        <th style="width:90px;">U.M.</th>
+                                        <th style="width:90px;">Código</th>
+                                        <th>Descripción</th>
+                                        <th class="text-end" style="width:90px;">P. Unit.</th>
+                                        <th class="text-end" style="width:100px;">Importe</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($detalleItems as $it)
+                                    <tr>
+                                        <td class="text-center">{{ number_format($it['cantidad'], 2) }}</td>
+                                        <td>{{ $it['um'] }}</td>
+                                        <td>{{ $it['codigo'] }}</td>
+                                        <td>{{ $it['descripcion'] }}</td>
+                                        <td class="text-end">{{ number_format($it['precio'], 2) }}</td>
+                                        <td class="text-end fw-semibold">{{ number_format($it['importe'], 2) }}</td>
+                                    </tr>
+                                    @empty
+                                    <tr><td colspan="6" class="text-center text-muted py-2">Sin productos.</td></tr>
+                                    @endforelse
+                                </tbody>
+                                <tfoot>
+                                    @if($detalle['descuento'] > 0)
+                                    <tr><td colspan="5" class="text-end text-muted">Descuento</td><td class="text-end text-danger">- S/ {{ number_format($detalle['descuento'], 2) }}</td></tr>
+                                    @endif
+                                    <tr><td colspan="5" class="text-end text-muted">Op. Gravada</td><td class="text-end">S/ {{ number_format($detalle['gravada'], 2) }}</td></tr>
+                                    @if($detalle['exonerada'] > 0)
+                                    <tr><td colspan="5" class="text-end text-muted">Op. Exonerada</td><td class="text-end">S/ {{ number_format($detalle['exonerada'], 2) }}</td></tr>
+                                    @endif
+                                    @if($detalle['inafecta'] > 0)
+                                    <tr><td colspan="5" class="text-end text-muted">Op. Inafecta</td><td class="text-end">S/ {{ number_format($detalle['inafecta'], 2) }}</td></tr>
+                                    @endif
+                                    <tr><td colspan="5" class="text-end text-muted">IGV (18%)</td><td class="text-end">S/ {{ number_format($detalle['igv'], 2) }}</td></tr>
+                                    <tr class="table-primary"><td colspan="5" class="text-end fw-bold">TOTAL</td><td class="text-end fw-bold text-primary">S/ {{ number_format($detalle['total'], 2) }}</td></tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    @endif
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     {{-- ══════ MODAL RECTIFICAR (Editar) ══════ --}}
@@ -245,6 +364,9 @@
 
     @script
     <script>
+        $wire.on('abrirModalDetalle', () => {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDetalleVenta')).show();
+        });
         $wire.on('abrirModalRectificar', () => {
             document.getElementById('rectificar-alerta').style.display = 'none';
             bootstrap.Modal.getOrCreateInstance(document.getElementById('modalRectificarComprobante')).show();
