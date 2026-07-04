@@ -67,6 +67,21 @@
         .autocomplete-items div.active-suggestion {
             background-color: #aad6fb !important;
         }
+
+        /* Estandarización global de títulos de modales:
+           MAYÚSCULAS, negrita y color negro.
+           El color se deja sin !important para que las cabeceras oscuras
+           que usan .text-white (Bootstrap, con !important) sigan legibles. */
+        .modal-title {
+            text-transform: uppercase !important;
+            font-weight: 700 !important;
+            color: #000;
+        }
+        /* El ícono del título de modal usa color primary por defecto.
+           Sin !important para respetar clases propias (text-danger, text-white, etc.). */
+        .modal-title i {
+            color: var(--bs-primary);
+        }
     </style>
 
     @livewireStyles
