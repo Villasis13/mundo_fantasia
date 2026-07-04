@@ -82,6 +82,20 @@ class LogisticaController extends Controller
         }
     }
 
+    public function unir_codigos()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("unir_codigos");
+            return view('logistica/unir_codigos', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>
+                alert(\"Error Al Mostrar Contenido. Redireccionando Al Inicio\");
+                window.location.href = '" . route('admin') . "';
+            </script>";
+        }
+    }
+
     public function compras()
     {
         try {

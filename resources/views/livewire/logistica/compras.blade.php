@@ -151,7 +151,7 @@
     {{-- Modal Nuevo Proveedor --}}
     <div class="modal fade" id="modalNuevoProveedor" wire:ignore.self tabindex="-1"
          data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered" style="max-width:500px;">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content border-0 shadow-lg">
                 <div class="modal-header border-bottom px-4 py-3">
                     <h5 class="modal-title fw-bold mb-0" style="font-size:16px;">
@@ -1323,7 +1323,7 @@
     {{-- ══ Modal: Seleccionar / Crear Transportista ══ --}}
     <div class="modal fade" id="modalTransportista" tabindex="-1" wire:ignore.self
          data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content border-0 shadow-lg">
                 <div style="height:4px;" class="bg-primary"></div>
                 <div class="modal-header border-0 pb-0 pt-3 px-4">

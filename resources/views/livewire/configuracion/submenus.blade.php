@@ -4,7 +4,7 @@
     {{--  MODAL — Crear / Editar Submenú                            --}}
     {{-- ═══════════════════════════════════════════════════════════ --}}
     <div class="modal fade" id="modalSubmenu" wire:ignore.self tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content border-0 shadow-lg">
 
                 <div class="modal-header border-bottom-0 pb-0">

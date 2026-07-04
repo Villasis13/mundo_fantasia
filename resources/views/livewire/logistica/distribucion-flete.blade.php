@@ -284,7 +284,7 @@
     {{-- ══ Modal: Seleccionar / Crear Transportista ══ --}}
     <div class="modal fade" id="modalTransportista" tabindex="-1" wire:ignore.self
          data-bs-backdrop="static" data-bs-keyboard="false">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content border-0 shadow-lg">
                 <div style="height:4px;" class="bg-primary"></div>
                 <div class="modal-header border-0 pb-0 pt-3 px-4">

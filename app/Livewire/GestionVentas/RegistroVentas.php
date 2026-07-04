@@ -21,6 +21,7 @@ class RegistroVentas extends Component
     public int    $filtroPuntoVenta = 0;
     public string $filtroEstado   = '';
     public int    $porPagina      = 20;
+    public bool   $filtrado       = false;
 
     // ── Tipos de pago (para rectificar) ───────────────────────
     public array $tiposPago = [];
@@ -56,13 +57,13 @@ class RegistroVentas extends Component
         $this->tiposPago   = DB::table('tipo_pago')->where('tipo_pago_estado', 1)->orderBy('id_tipo_pago')->get()->toArray();
     }
 
-    public function updatedFiltroDesde(): void    { $this->resetPage(); }
-    public function updatedFiltroHasta(): void    { $this->resetPage(); }
-    public function updatedFiltroSerie(): void    { $this->resetPage(); }
-    public function updatedFiltroNumero(): void   { $this->resetPage(); }
-    public function updatedFiltroCliente(): void    { $this->resetPage(); }
-    public function updatedFiltroPuntoVenta(): void { $this->resetPage(); }
-    public function updatedFiltroEstado(): void     { $this->resetPage(); }
+    public function updatedFiltroDesde(): void    { $this->filtrado = true; $this->resetPage(); }
+    public function updatedFiltroHasta(): void    { $this->filtrado = true; $this->resetPage(); }
+    public function updatedFiltroSerie(): void    { $this->filtrado = true; $this->resetPage(); }
+    public function updatedFiltroNumero(): void   { $this->filtrado = true; $this->resetPage(); }
+    public function updatedFiltroCliente(): void    { $this->filtrado = true; $this->resetPage(); }
+    public function updatedFiltroPuntoVenta(): void { $this->filtrado = true; $this->resetPage(); }
+    public function updatedFiltroEstado(): void     { $this->filtrado = true; $this->resetPage(); }
     public function updatingPorPagina(): void     { $this->resetPage(); }
 
     private function baseQuery()
@@ -320,7 +321,10 @@ class RegistroVentas extends Component
 
     public function render()
     {
-        $ventas = $this->baseQuery()->paginate($this->porPagina);
+        // No mostrar registros hasta que se aplique un filtro
+        $ventas = $this->filtrado
+            ? $this->baseQuery()->paginate($this->porPagina)
+            : new \Illuminate\Pagination\LengthAwarePaginator([], 0, $this->porPagina);
 
         // Tipos de pago por venta (lista) para las ventas de la página actual
         $ids = collect($ventas->items())->pluck('id_venta')->all();
@@ -337,11 +341,35 @@ class RegistroVentas extends Component
             }
         }
 
-        // Puntos de venta = usuarios con rol Ventas (role 5)
+        // Puntos de venta = usuarios cajeros (rol 4) con permiso de cobrar (caja_pedidos.crear)
+        $permCobrarId = DB::table('permissions')->where('name', 'caja_pedidos.crear')->value('id');
+
         $puntosVenta = DB::table('users as u')
-            ->join('model_has_roles as mr', 'mr.model_id', '=', 'u.id_users')
-            ->where('mr.role_id', 5)
+            ->join('model_has_roles as mr', function ($j) {
+                $j->on('mr.model_id', '=', 'u.id_users')
+                  ->where('mr.model_type', 'App\\Models\\User')
+                  ->where('mr.role_id', 4);
+            })
             ->where('u.users_estado', 1)
+            ->when($permCobrarId, function ($q) use ($permCobrarId) {
+                $q->where(function ($w) use ($permCobrarId) {
+                    // permiso otorgado por alguno de sus roles
+                    $w->whereExists(function ($sub) use ($permCobrarId) {
+                        $sub->from('model_has_roles as mr2')
+                            ->join('role_has_permissions as rhp', 'rhp.role_id', '=', 'mr2.role_id')
+                            ->whereColumn('mr2.model_id', 'u.id_users')
+                            ->where('mr2.model_type', 'App\\Models\\User')
+                            ->where('rhp.permission_id', $permCobrarId);
+                    })
+                    // o permiso directo al usuario
+                    ->orWhereExists(function ($sub) use ($permCobrarId) {
+                        $sub->from('model_has_permissions as mhp')
+                            ->whereColumn('mhp.model_id', 'u.id_users')
+                            ->where('mhp.model_type', 'App\\Models\\User')
+                            ->where('mhp.permission_id', $permCobrarId);
+                    });
+                });
+            })
             ->orderBy('u.nombre_users')
             ->select('u.id_users', 'u.nombre_users')
             ->distinct()

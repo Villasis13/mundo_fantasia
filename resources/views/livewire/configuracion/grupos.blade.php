@@ -40,7 +40,7 @@
     {{--  MODAL — Crear / Editar Grupo                            --}}
     {{-- ══════════════════════════════════════════════════════════ --}}
     <div class="modal fade" id="modalGrupo" wire:ignore.self tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content border-0 shadow-lg">
                 <div class="modal-header">
                     <h5 class="modal-title fw-semibold">

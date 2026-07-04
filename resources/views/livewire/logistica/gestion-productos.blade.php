@@ -5,7 +5,7 @@
     ═══════════════════════════════════════════════════════════════ --}}
     <div class="modal fade" id="modalProducto" wire:ignore.self tabindex="-1"
          aria-hidden="true" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content border-0 shadow-lg">
 
                 <div class="modal-header border-bottom-0 pb-0">
@@ -62,7 +62,7 @@
                             </div>
                             @endif --}}
 
-                            <div class="col-md-8">
+                            <div class="col-lg-5">
                                 <label class="form-label fw-semibold small text-secondary mb-1">
                                     Nombre <span class="text-danger">*</span>
                                 </label>
@@ -75,7 +75,7 @@
                                 @enderror
                             </div>
 
-                            <div class="col-md-4">
+                            <div class="col-lg-3">
                                 <label class="form-label fw-semibold small text-secondary mb-1">
                                     Código <span class="text-danger">*</span>
                                 </label>
@@ -88,7 +88,7 @@
                                 @enderror
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">Marca</label>
                                 <input type="text"
                                        wire:model="proMarca"
@@ -103,7 +103,7 @@
                                 @error('proMarca') <div class="invalid-feedback">{{ $message }}</div> @enderror
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">
                                     Familia <span class="text-danger">*</span>
                                 </label>
@@ -115,7 +115,7 @@
                                 </select>
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">
                                     Categoría <span class="text-danger">*</span>
                                 </label>
@@ -134,23 +134,29 @@
                                 @enderror
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">
                                     Unidad de Medida <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select @error('idMedida') is-invalid @enderror"
-                                        wire:model="idMedida">
-                                    <option value="">— Seleccionar —</option>
-                                    @foreach($medidas->whereIn('id_medida', [58, 59]) as $med)
-                                        <option value="{{ $med->id_medida }}">{{ $med->medida_nombre }}</option>
-                                    @endforeach
-                                </select>
+                                <div class="input-group">
+                                    <select class="form-select @error('idMedida') is-invalid @enderror"
+                                            wire:model="idMedida">
+                                        <option value="">— Seleccionar —</option>
+                                        @foreach($medidas->whereNotNull('unidad_codigo')->sortBy('unidad_codigo') as $med)
+                                            <option value="{{ $med->id_medida }}">{{ $med->unidad_codigo }} - {{ $med->medida_nombre }}</option>
+                                        @endforeach
+                                    </select>
+                                    <button type="button" class="btn btn-outline-primary" title="Nueva unidad de medida"
+                                            wire:click="abrirModalMedida">
+                                        <i class="fa-solid fa-plus"></i>
+                                    </button>
+                                </div>
                                 @error('idMedida')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">
                                     Tipo de Afectación <span class="text-danger">*</span>
                                 </label>
@@ -166,7 +172,7 @@
                                 @enderror
                             </div>
 
-                            <div class="col-md-6 d-flex align-items-end pb-1">
+                            <div class="col-lg-4 d-flex align-items-end pb-1">
                                 <div class="form-check form-switch d-flex align-items-center gap-3 ps-0 w-100">
                                     <input class="form-check-input ms-0 flex-shrink-0"
                                            type="checkbox" role="switch"
@@ -184,7 +190,7 @@
                             </div>
 
                             {{-- ── Código Interno ──────────────────── --}}
-                            <div class="col-md-4">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">
                                     Código Interno
                                 </label>
@@ -235,7 +241,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">Costo Total</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light">S/</span>
@@ -247,7 +253,7 @@
                                 <small class="text-muted" style="font-size:.7rem;">(Base + Flete) × (1 + Margen%)</small>
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">Precio de Venta</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text">S/</span>
@@ -258,7 +264,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">Precio Público</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text">S/</span>
@@ -269,7 +275,7 @@
                                 </div>
                             </div>
 
-                            <div class="col-md-6">
+                            <div class="col-lg-4">
                                 <label class="form-label fw-semibold small text-secondary mb-1">Precio Mayorista</label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text">S/</span>
@@ -311,6 +317,78 @@
                     </button>
                 </div>
 
+            </div>
+        </div>
+    </div>
+
+    {{-- ══════════════════════════════════════════════════════════
+         MODAL — Nueva Unidad de Medida
+    ═══════════════════════════════════════════════════════════════ --}}
+    <div class="modal fade" id="modalMedida" wire:ignore.self tabindex="-1"
+         aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fa-solid fa-ruler me-2"></i>Nueva Unidad de Medida
+                    </h5>
+                    <button type="button" class="btn-close" wire:click="cancelarMedida"></button>
+                </div>
+                <div class="modal-body px-4 pt-3 pb-2">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold small text-secondary mb-1">
+                                Código <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" wire:model="medCodigo"
+                                   class="form-control @error('medCodigo') is-invalid @enderror"
+                                   placeholder="Ej. 51">
+                            @error('medCodigo') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold small text-secondary mb-1">
+                                Presentación <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" wire:model="medNombre"
+                                   class="form-control @error('medNombre') is-invalid @enderror"
+                                   placeholder="Ej. Media docena">
+                            @error('medNombre') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small text-secondary mb-1">
+                                Cantidad <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" step="0.001" min="0" wire:model="medCantidad"
+                                   class="form-control @error('medCantidad') is-invalid @enderror"
+                                   placeholder="1.000">
+                            @error('medCantidad') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small text-secondary mb-1">
+                                Abreviatura <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" wire:model="medAbrev"
+                                   class="form-control @error('medAbrev') is-invalid @enderror"
+                                   placeholder="Ej. 1/2doc">
+                            @error('medAbrev') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 pt-0 px-4 pb-4 justify-content-between">
+                    <button type="button" class="btn btn-light px-4" wire:click="cancelarMedida">
+                        <i class="fa-solid fa-arrow-left me-1"></i> Volver
+                    </button>
+                    <button type="button" class="btn btn-primary fw-semibold px-5"
+                            wire:click="guardarMedida"
+                            wire:loading.attr="disabled" wire:target="guardarMedida">
+                        <span wire:loading.remove wire:target="guardarMedida">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Guardar
+                        </span>
+                        <span wire:loading wire:target="guardarMedida">
+                            <span class="spinner-border spinner-border-sm me-1"></span> Guardando...
+                        </span>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -649,6 +727,11 @@
                     <small class="text-muted">Administra el catálogo de productos por empresa y sucursal.</small>
                 </div>
                 <div class="d-flex gap-2 flex-wrap">
+                    @can('gestion_productos.crear')
+                    <button class="btn btn-sm btn-outline-primary fw-semibold" wire:click="abrirModalMedidaSolo">
+                        <i class="fa-solid fa-plus me-1"></i> Medida
+                    </button>
+                    @endcan
                     @can('gestion_productos.exportar')
                     <button class="btn btn-sm btn-outline-success fw-semibold"
                             wire:click="exportarExcel"
@@ -1410,6 +1493,15 @@
 
     $wire.on('cerrarModal', () => {
         const m = bootstrap.Modal.getInstance(document.getElementById('modalProducto'));
+        if (m) m.hide();
+    });
+
+    $wire.on('abrirModalMedida', () => {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalMedida')).show();
+    });
+
+    $wire.on('cerrarModalMedida', () => {
+        const m = bootstrap.Modal.getInstance(document.getElementById('modalMedida'));
         if (m) m.hide();
     });
 

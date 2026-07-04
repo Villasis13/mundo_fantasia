@@ -18,7 +18,7 @@
 
     {{-- ── Modal: Registrar pago ─────────────────────────────────── --}}
     <div class="modal fade" id="modalPagoCxP" tabindex="-1" wire:ignore.self>
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content border-0 shadow">
                 <div class="modal-header">
                     <h5 class="modal-title fw-semibold">

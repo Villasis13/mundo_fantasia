@@ -796,6 +796,82 @@ class GestionProductos extends Component
         }
     }
 
+    // ── Nueva Unidad de Medida (desde el modal de producto) ───────
+    public string $medCodigo   = '';
+    public string $medNombre   = '';
+    public string $medCantidad = '1';
+    public string $medAbrev    = '';
+    public bool   $medReabrirProducto = false;   // si vino desde el modal de producto
+
+    private function resetMedida(): void
+    {
+        $this->reset(['medCodigo', 'medNombre', 'medAbrev']);
+        $this->medCantidad = '1';
+        $this->resetErrorBag(['medCodigo', 'medNombre', 'medCantidad', 'medAbrev']);
+    }
+
+    // Desde el botón "+" del select (dentro del modal de producto)
+    public function abrirModalMedida(): void
+    {
+        $this->resetMedida();
+        $this->medReabrirProducto = true;
+        $this->dispatch('cerrarModal');          // cierra el modal de producto
+        $this->dispatch('abrirModalMedida');     // abre el modal de medida
+    }
+
+    // Desde el botón "Medida" del toolbar (sin modal de producto abierto)
+    public function abrirModalMedidaSolo(): void
+    {
+        $this->resetMedida();
+        $this->medReabrirProducto = false;
+        $this->dispatch('abrirModalMedida');
+    }
+
+    public function cancelarMedida(): void
+    {
+        $this->dispatch('cerrarModalMedida');
+        if ($this->medReabrirProducto) {
+            $this->dispatch('abrirModal');       // regresa al modal de producto
+        }
+    }
+
+    public function guardarMedida(): void
+    {
+        $this->validate([
+            'medCodigo'   => 'required|string|max:225',
+            'medNombre'   => 'required|string|max:255',
+            'medCantidad' => 'required|numeric|min:0',
+            'medAbrev'    => 'required|string|max:255',
+        ], [], [
+            'medCodigo'   => 'código',
+            'medNombre'   => 'presentación',
+            'medCantidad' => 'cantidad',
+            'medAbrev'    => 'abreviatura',
+        ]);
+
+        $nuevoId = DB::table('medida')->insertGetId([
+            'medida_codigo_unidad' => trim($this->medAbrev),
+            'unidad_codigo'        => trim($this->medCodigo),
+            'medida_cantidad'      => (float) $this->medCantidad,
+            'medida_nombre'        => trim($this->medNombre),
+            'medida_activo'        => 1,
+            'medida_grupo'         => null,
+            'created_at'           => now(),
+            'updated_at'           => now(),
+        ], 'id_medida');
+
+        $this->dispatch('cerrarModalMedida');
+
+        if ($this->medReabrirProducto) {
+            // Seleccionar la nueva medida y regresar al modal de producto
+            $this->idMedida = (int) $nuevoId;
+            $this->dispatch('abrirModal');
+            session()->flash('successMedida', 'Unidad de medida creada y seleccionada.');
+        } else {
+            session()->flash('success', 'Unidad de medida creada correctamente.');
+        }
+    }
+
     // ── Guardar ───────────────────────────────────────────────────
     public function guardar(): void
     {

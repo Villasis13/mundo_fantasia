@@ -16,7 +16,7 @@
     {{--  MODAL — Crear / Editar Usuario                            --}}
     {{-- ═══════════════════════════════════════════════════════════ --}}
     <div class="modal fade" id="modalUsuario" wire:ignore.self tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content border-0 shadow-lg">
 
                 <div class="modal-header border-bottom-0 pb-0">
@@ -102,7 +102,7 @@
                         </div>
 
                         {{-- Apellido Paterno --}}
-                        <div class="col-md-6">
+                        <div class="col-lg-4">
                             <label class="form-label fw-semibold small text-secondary mb-1">
                                 Apellido Paterno <span class="text-danger">*</span>
                             </label>
@@ -114,7 +114,7 @@
                         </div>
 
                         {{-- Apellido Materno --}}
-                        <div class="col-md-6">
+                        <div class="col-lg-4">
                             <label class="form-label fw-semibold small text-secondary mb-1">Apellido Materno</label>
                             <input type="text"
                                    wire:model="apellidoMaterno"
@@ -124,7 +124,7 @@
                         </div>
 
                         {{-- Email --}}
-                        <div class="col-md-6">
+                        <div class="col-lg-4">
                             <label class="form-label fw-semibold small text-secondary mb-1">
                                 Correo electrónico <span class="text-danger">*</span>
                             </label>
@@ -136,7 +136,7 @@
                         </div>
 
                         {{-- Username --}}
-                        <div class="col-md-6">
+                        <div class="col-lg-4">
                             <label class="form-label fw-semibold small text-secondary mb-1">
                                 Nombre de usuario <span class="text-danger">*</span>
                             </label>
@@ -148,7 +148,7 @@
                         </div>
 
                         {{-- Rol --}}
-                        <div class="col-md-6">
+                        <div class="col-lg-4">
                             <label class="form-label fw-semibold small text-secondary mb-1">
                                 Rol <span class="text-danger">*</span>
                             </label>
@@ -171,7 +171,7 @@
                             </small>
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-lg-4">
                             <label class="form-label fw-semibold small text-secondary mb-1">
                                 Contraseña @if(!$modoEdicion)<span class="text-danger">*</span>@endif
                             </label>
@@ -182,7 +182,7 @@
                             @error('password') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-lg-4">
                             <label class="form-label fw-semibold small text-secondary mb-1">
                                 Repetir contraseña @if(!$modoEdicion)<span class="text-danger">*</span>@endif
                             </label>

@@ -169,7 +169,14 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="8" class="text-center text-muted py-4"><i class="fa fa-inbox fa-2x d-block mb-2 opacity-50"></i>No se encontraron ventas con los filtros seleccionados.</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted py-4">
+                                <i class="fa fa-filter fa-2x d-block mb-2 opacity-50"></i>
+                                @if($filtrado)
+                                    No se encontraron ventas con los filtros seleccionados.
+                                @else
+                                    Aplique un filtro para mostrar los comprobantes.
+                                @endif
+                            </td></tr>
                         @endforelse
                     </tbody>
                 </table>
