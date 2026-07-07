@@ -56,6 +56,67 @@
                         <option value="enviado">Enviado</option>
                     </select>
                 </div>
+                <div class="col-12 col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-outline-primary btn-sm w-100"
+                            data-bs-toggle="modal" data-bs-target="#modalReporteVentas">
+                        <i class="fa-solid fa-file-lines me-1"></i> Resumen de Venta
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ══════ MODAL REPORTE ══════ --}}
+    <div class="modal fade" id="modalReporteVentas" wire:ignore.self tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-file-lines text-primary me-2"></i>Resumen de Ventas(Ticketera)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    {{-- Filtros informativos --}}
+                    <div class="border rounded p-3 mb-3 bg-light">
+                        <div class="row g-2" style="font-size:.85rem;">
+                            <div class="col-12"><span class="text-muted">Empresa:</span> <span class="fw-semibold">{{ $empresaNombre ?: '—' }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">Inicio:</span> <span class="fw-semibold">{{ $filtroDesde ? \Carbon\Carbon::parse($filtroDesde)->format('d/m/Y') : '—' }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">Término:</span> <span class="fw-semibold">{{ $filtroHasta ? \Carbon\Carbon::parse($filtroHasta)->format('d/m/Y') : '—' }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">Cliente:</span> <span class="fw-semibold">{{ $filtroCliente ?: 'Todos' }}</span></div>
+                            <div class="col-md-6"><span class="text-muted">Punto de venta:</span>
+                                <span class="fw-semibold">
+                                    @php $pv = collect($puntosVenta)->firstWhere('id_users', $filtroPuntoVenta); @endphp
+                                    {{ $filtroPuntoVenta > 0 ? ($pv->nombre_users ?? '—') : 'Todos' }}
+                                </span>
+                            </div>
+                            <div class="col-md-6"><span class="text-muted">Estado:</span> <span class="fw-semibold">{{ $filtroEstado ? ucfirst($filtroEstado) : 'Todos' }}</span></div>
+                        </div>
+                    </div>
+
+                    {{-- Tipos de reporte --}}
+                    <div class="mb-2 fw-semibold small text-secondary">Tipo de reporte</div>
+                    <div class="row g-2 mb-2">
+                        @foreach(['A'=>'Tipo A','B'=>'Tipo B','C'=>'Tipo C','E'=>'Tipo E'] as $k => $lbl)
+                        <div class="col-6 col-md-3">
+                            <div class="form-check border rounded p-2 ps-4">
+                                <input class="form-check-input" type="radio" name="reporteTipo" id="tipo{{ $k }}"
+                                       value="{{ $k }}" wire:model="reporteTipo">
+                                <label class="form-check-label fw-semibold" for="tipo{{ $k }}">{{ $lbl }}</label>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-danger fw-semibold" wire:click="generarReportePdf">
+                            <i class="fa-solid fa-file-pdf me-1"></i> PDF
+                        </button>
+                        <button type="button" class="btn btn-secondary fw-semibold" wire:click="imprimirReporte">
+                            <i class="fa-solid fa-print me-1"></i> Imprimir
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -102,34 +163,24 @@
                                     <div class="text-muted" style="font-size:.72rem;">{{ $vta->cliente_numero }}</div>
                                 </td>
                                 <td class="text-center">
-                                    @if($vta->id_formas_pago == 2)
-                                        <span class="badge bg-warning text-dark">Crédito</span>
-                                    @else
-                                        <span class="badge bg-success">Contado</span>
-                                    @endif
+                                    {{ $vta->id_formas_pago == 2 ? 'Crédito' : 'Contado' }}
                                 </td>
                                 <td>
                                     @if(count($pagos))
-                                        @if(count($pagos) === 1)
-                                            <span class="badge bg-info text-dark">{{ $pagos[0] }}</span>
-                                        @else
-                                            <ul class="mb-0 ps-3" style="font-size:.74rem;">
-                                                @foreach($pagos as $tp)<li>{{ $tp }}</li>@endforeach
-                                            </ul>
-                                        @endif
+                                        {{ implode(', ', $pagos) }}
                                     @else
-                                        <span class="text-muted">—</span>
+                                        —
                                     @endif
                                 </td>
                                 <td class="text-center">
                                     @if($vta->tiene_nc ?? 0)
-                                        <span class="badge bg-danger">Anulado por crédito</span>
+                                        Anulado por crédito
                                     @elseif(($vta->venta_estado_sunat ?? 0) == 1)
-                                        <span class="badge bg-success">Enviado</span>
+                                        Enviado
                                     @elseif($vta->venta_tipo == '20')
-                                        <span class="badge bg-secondary">Nuevo</span>
+                                        Nuevo
                                     @else
-                                        <span class="badge bg-warning text-dark">Pendiente</span>
+                                        Pendiente
                                     @endif
                                 </td>
                                 <td class="text-end fw-bold text-primary">S/ {{ number_format($vta->venta_total, 2) }}</td>
@@ -141,6 +192,10 @@
                                             <span wire:loading.remove wire:target="verDetalle({{ $vta->id_venta }})"><i class="fa-solid fa-eye"></i></span>
                                             <span wire:loading wire:target="verDetalle({{ $vta->id_venta }})"><span class="spinner-border spinner-border-sm"></span></span>
                                         </button>
+                                        <a href="{{ route('Gestionventas.imprimir_ticket_escpos_pdf', ['venta_id' => $vta->id_venta]) }}"
+                                           target="_blank" class="btn btn-sm btn-outline-danger" title="Ver ticket en PDF">
+                                            <i class="fa-solid fa-receipt"></i>
+                                        </a>
                                         <button type="button" class="btn btn-sm btn-outline-secondary" title="Imprimir comprobante"
                                                 wire:click="reimprimir({{ $vta->id_venta }})"
                                                 wire:loading.attr="disabled" wire:target="reimprimir({{ $vta->id_venta }})">
@@ -371,6 +426,21 @@
 
     @script
     <script>
+        $wire.on('abrirReportePdf', (e) => {
+            const d = Array.isArray(e) ? e[0] : e;
+            if (d && d.url) window.open(d.url, '_blank');
+        });
+        $wire.on('imprimirReporteTicket', (e) => {
+            const d = Array.isArray(e) ? e[0] : e;
+            if (!d || !d.url) return;
+            fetch(d.url)
+                .then(r => r.json())
+                .then(data => { if (!data.ok) alert('Error al imprimir: ' + (data.error ?? 'desconocido')); })
+                .catch(err => { alert('No se pudo conectar con la impresora. Verifique el agente de impresión.'); console.error(err); });
+        });
+        $wire.on('reporte-sin-tipo', () => {
+            alert('Selecciona al menos un tipo de reporte.');
+        });
         $wire.on('abrirModalDetalle', () => {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDetalleVenta')).show();
         });

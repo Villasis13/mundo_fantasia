@@ -816,6 +816,42 @@ class Caja extends Component
                 $det->save();
             }
 
+            // ── Movimiento de salida para el Kardex (una venta = una salida) ──
+            $itemsStock = array_filter($this->items, fn($it) => !empty($it['id_pro']) && (float) $it['cantidad'] > 0);
+            if (!empty($itemsStock)) {
+                $serieCorr = $informacionSerie->serie . '-' . str_pad($informacionSerie->correlativo + 1, 8, '0', STR_PAD_LEFT);
+                $idMovVenta = DB::table('movimientos_productos')->insertGetId([
+                    'movimientos_productos_fecha'          => now()->toDateString(),
+                    'id_users'                             => auth()->user()->id_users,
+                    'id_sucursal'                          => $this->idTienda,
+                    'id_almacen'                           => null,
+                    'movimientos_productos_fecha_creacion' => now(),
+                    'movimientos_productos_tipo'           => 2, // salida
+                    'movimientos_productos_estado'         => 1,
+                    'movimientos_productos_motivo'         => 'Venta ' . $serieCorr,
+                    'created_at'                           => now(),
+                    'updated_at'                           => now(),
+                ]);
+
+                foreach ($itemsStock as $item) {
+                    $idPro    = (int) $item['id_pro'];
+                    $cantidad = (float) $item['cantidad'] * (float) ($item['pres_factor'] ?? 1);
+                    $costoUni = (float) (DB::table('productos')->where('id_pro', $idPro)->value('pro_costo_total') ?? 0);
+
+                    DB::table('movimientos_productos_detalle')->insert([
+                        'id_movimientos_productos'               => $idMovVenta,
+                        'id_pro'                                 => $idPro,
+                        'movimientos_productos_detalle_cantidad' => (string) $cantidad,
+                        'costo_unitario'                         => $costoUni,
+                        'id_referencia'                          => $idVenta,
+                        'tipo_referencia'                        => 'venta',
+                        'movimientos_productos_detalle_estado'   => '1',
+                        'created_at'                             => now(),
+                        'updated_at'                             => now(),
+                    ]);
+                }
+            }
+
             if ($this->idFormasPago === 1 && !$this->esGratuita) {
                 foreach ($this->pagos as $lineaPago) {
                     $p = new Ventas_detalle_pago();

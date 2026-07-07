@@ -618,6 +618,7 @@ class Compras extends Component
                     'detalle_orden_nombre_producto' => $item['nombre'],
                     'presentacion'                  => $item['presentacion'] !== '' ? $item['presentacion'] : null,
                     'detalle_compra_cantidad'       => (float) $item['cantidad'],
+                    'detalle_compra_cantidad_recibida' => $this->estadoOrden === 'recibido' ? (float) $item['cantidad'] : null,
                     'cantidad_x_unidad'             => $item['cantidad_x_unidad'] !== '' ? (float) $item['cantidad_x_unidad'] : null,
                     'detalle_compra_precio_compra'  => (float) $item['precio_compra'],
                     'detalle_compra_total_pedido'   => (float) $item['total'],
@@ -626,6 +627,73 @@ class Compras extends Component
                     'created_at'                    => now(),
                     'updated_at'                    => now(),
                 ]);
+            }
+
+            // Si la compra se registra ya RECIBIDA → cargar stock de cada producto
+            if ($this->estadoOrden === 'recibido') {
+                $idEmpresaOrden = $this->empresaIdCompra ?: null;
+                $idTiendaRec = $idEmpresaOrden
+                    ? (int) DB::table('tiendas')->where('id_empresa', $idEmpresaOrden)->where('tienda_estado', 1)->orderBy('id_tienda')->value('id_tienda')
+                    : (int) DB::table('tiendas')->where('tienda_estado', 1)->orderBy('id_tienda')->value('id_tienda');
+
+                if (!$idTiendaRec) {
+                    throw new \Exception('No hay sede disponible para cargar el stock de la compra recibida.');
+                }
+
+                $idMovimiento = DB::table('movimientos_productos')->insertGetId([
+                    'movimientos_productos_fecha'          => now()->toDateString(),
+                    'id_users'                             => auth()->user()->id_users,
+                    'id_sucursal'                          => $idTiendaRec,
+                    'id_almacen'                           => null,
+                    'movimientos_productos_fecha_creacion' => now(),
+                    'movimientos_productos_tipo'           => 1,
+                    'movimientos_productos_estado'         => 1,
+                    'movimientos_productos_motivo'         => 'Recepción Compra ' . $numero,
+                    'created_at'                           => now(),
+                    'updated_at'                           => now(),
+                ]);
+
+                foreach ($this->items as $item) {
+                    $cantidad = (float) $item['cantidad'];
+                    $costoUni = (float) $item['precio_compra'];
+                    if ($cantidad <= 0) continue;
+
+                    $ps = DB::table('producto_sucursal')
+                        ->where('id_tienda', $idTiendaRec)->where('id_pro', $item['id_pro'])->first();
+
+                    if ($ps) {
+                        DB::table('producto_sucursal')->where('id_ps', $ps->id_ps)
+                            ->increment('ps_stock', $cantidad, ['updated_at' => now()]);
+                    } else {
+                        DB::table('producto_sucursal')->insert([
+                            'id_pro'             => $item['id_pro'],
+                            'id_sucursal'        => null,
+                            'id_tienda'          => $idTiendaRec,
+                            'id_tipo_afectacion' => 1,
+                            'ps_precio_uni'      => $costoUni,
+                            'ps_precio_uni_2'    => 0,
+                            'ps_precio_uni_3'    => 0,
+                            'ps_stock'           => $cantidad,
+                            'ps_stock_minimo'    => 0,
+                            'ps_porcen_igv'      => 18,
+                            'ps_estado'          => 1,
+                            'created_at'         => now(),
+                            'updated_at'         => now(),
+                        ]);
+                    }
+
+                    DB::table('movimientos_productos_detalle')->insert([
+                        'id_movimientos_productos'               => $idMovimiento,
+                        'id_pro'                                 => $item['id_pro'],
+                        'movimientos_productos_detalle_cantidad' => (string) $cantidad,
+                        'costo_unitario'                         => $costoUni,
+                        'id_referencia'                          => $idOrden,
+                        'tipo_referencia'                        => 'compra',
+                        'movimientos_productos_detalle_estado'   => '1',
+                        'created_at'                             => now(),
+                        'updated_at'                             => now(),
+                    ]);
+                }
             }
 
             // Si es a crédito, crear la cuenta por pagar automáticamente
@@ -657,7 +725,9 @@ class Compras extends Component
             DB::commit();
             $this->limpiarFormulario();
             $this->vista = 'nueva';
-            session()->flash('success', "Compra {$numero} registrada. Recepcione cuando llegue la mercadería.");
+            session()->flash('success', $this->estadoOrden === 'recibido'
+                ? "Compra {$numero} registrada y recepcionada. El stock de cada producto fue actualizado."
+                : "Compra {$numero} registrada. Recepcione cuando llegue la mercadería.");
         } catch (\Exception $e) {
             DB::rollBack();
             $this->logs->insertarLog($e);
@@ -697,6 +767,150 @@ class Compras extends Component
         $this->idEnviar = null;
         $this->dispatch('cerrarModalEnviar');
         session()->flash('success', 'Orden marcada como en tránsito.');
+    }
+
+    // ── Compras en tránsito (modal) ───────────────────────────
+    public array $comprasTransito = [];
+    public ?int  $transitoId      = null;
+
+    public function cargarTransito(): void
+    {
+        $this->comprasTransito = DB::table('orden_compra')
+            ->where('orden_compra_estado', 'en_transito')
+            ->orderByDesc('id_orden_compra')
+            ->get([
+                'id_orden_compra', 'orden_compra_numero', 'orden_compra_tipo_doc',
+                'orden_compra_numero_doc', 'orden_compra_nom_prove',
+            ])->map(fn($o) => (array) $o)->toArray();
+
+        $this->dispatch('abrirModalTransito');
+    }
+
+    // Abre el modal de confirmación sí/no para una compra en tránsito
+    public function confirmarTransito(int $id): void
+    {
+        $this->transitoId = $id;
+        $this->dispatch('abrirModalConfirmarTransito');
+    }
+
+    // Procesa la recepción de una compra en tránsito (cantidad completa, sin permiso extra)
+    public function procesarTransito(): void
+    {
+        if (!$this->transitoId) return;
+
+        $orden = DB::table('orden_compra')->where('id_orden_compra', $this->transitoId)->first();
+        if (!$orden || $orden->orden_compra_estado !== 'en_transito') {
+            session()->flash('errorTransito', 'Solo se puede recepcionar una compra en tránsito.');
+            $this->transitoId = null;
+            $this->dispatch('cerrarModalConfirmarTransito');
+            $this->cargarTransito();
+            return;
+        }
+
+        $idEmpresaOrden = $orden->id_empresa;
+        if (!$idEmpresaOrden && $orden->id_sucursal) {
+            $idEmpresaOrden = DB::table('tiendas')->where('id_tienda', $orden->id_sucursal)->value('id_empresa');
+        }
+        $idTienda = $idEmpresaOrden
+            ? (int) DB::table('tiendas')->where('id_empresa', $idEmpresaOrden)->where('tienda_estado', 1)->orderBy('id_tienda')->value('id_tienda')
+            : (int) DB::table('tiendas')->where('tienda_estado', 1)->orderBy('id_tienda')->value('id_tienda');
+
+        if (!$idTienda) {
+            session()->flash('errorTransito', 'No hay sede disponible para recepcionar la compra.');
+            $this->transitoId = null;
+            $this->dispatch('cerrarModalConfirmarTransito');
+            return;
+        }
+
+        DB::beginTransaction();
+        try {
+            $detalle = DB::table('orden_compra_detalle')
+                ->where('id_orden_compra', $this->transitoId)
+                ->where('detalle_compra_estado', 1)
+                ->get();
+
+            $idMovimiento = DB::table('movimientos_productos')->insertGetId([
+                'movimientos_productos_fecha'          => now()->toDateString(),
+                'id_users'                             => auth()->user()->id_users,
+                'id_sucursal'                          => $idTienda,
+                'id_almacen'                           => null,
+                'movimientos_productos_fecha_creacion' => now(),
+                'movimientos_productos_tipo'           => 1,
+                'movimientos_productos_estado'         => 1,
+                'movimientos_productos_motivo'         => 'Recepción Compra ' . $orden->orden_compra_numero,
+                'created_at'                           => now(),
+                'updated_at'                           => now(),
+            ]);
+
+            foreach ($detalle as $item) {
+                $cantidad = (float) $item->detalle_compra_cantidad;   // cantidad completa
+                $costoUni = (float) $item->detalle_compra_precio_compra;
+
+                DB::table('orden_compra_detalle')
+                    ->where('id_detalle_compra', $item->id_detalle_compra)
+                    ->update(['detalle_compra_cantidad_recibida' => $cantidad, 'updated_at' => now()]);
+
+                if ($cantidad <= 0) continue;
+
+                $ps = DB::table('producto_sucursal')
+                    ->where('id_tienda', $idTienda)->where('id_pro', $item->id_pro)->first();
+
+                if ($ps) {
+                    DB::table('producto_sucursal')->where('id_ps', $ps->id_ps)
+                        ->increment('ps_stock', $cantidad, ['updated_at' => now()]);
+                } else {
+                    DB::table('producto_sucursal')->insert([
+                        'id_pro'             => $item->id_pro,
+                        'id_sucursal'        => null,
+                        'id_tienda'          => $idTienda,
+                        'id_tipo_afectacion' => 1,
+                        'ps_precio_uni'      => $costoUni,
+                        'ps_precio_uni_2'    => 0,
+                        'ps_precio_uni_3'    => 0,
+                        'ps_stock'           => $cantidad,
+                        'ps_stock_minimo'    => 0,
+                        'ps_porcen_igv'      => 18,
+                        'ps_estado'          => 1,
+                        'created_at'         => now(),
+                        'updated_at'         => now(),
+                    ]);
+                }
+
+                DB::table('movimientos_productos_detalle')->insert([
+                    'id_movimientos_productos'               => $idMovimiento,
+                    'id_pro'                                 => $item->id_pro,
+                    'movimientos_productos_detalle_cantidad' => (string) $cantidad,
+                    'costo_unitario'                         => $costoUni,
+                    'id_referencia'                          => $this->transitoId,
+                    'tipo_referencia'                        => 'compra',
+                    'movimientos_productos_detalle_estado'   => '1',
+                    'created_at'                             => now(),
+                    'updated_at'                             => now(),
+                ]);
+            }
+
+            DB::table('orden_compra')
+                ->where('id_orden_compra', $this->transitoId)
+                ->update([
+                    'orden_compra_estado'           => 'recibido',
+                    'orden_compra_fecha_recibida'   => now(),
+                    'orden_compra_usuario_recibido' => auth()->user()->nombre_users ?? (string) auth()->id(),
+                    'id_sucursal'                   => $idTienda,
+                    'id_almacen'                    => null,
+                    'updated_at'                    => now(),
+                ]);
+
+            DB::commit();
+            session()->flash('successTransito', 'Compra ' . $orden->orden_compra_numero . ' recepcionada. Stock actualizado.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            $this->logs->insertarLog($e);
+            session()->flash('errorTransito', 'Error al recepcionar la compra: ' . $e->getMessage());
+        }
+
+        $this->transitoId = null;
+        $this->dispatch('cerrarModalConfirmarTransito');
+        $this->cargarTransito();
     }
 
     // ── Recepcionar compra (en_transito → recibido + stock Almacén Principal) ──

@@ -74,6 +74,28 @@ class FacturacionController extends Controller
         }
     }
 
+    public function envio_recepcion_comprobantes(Request $request)
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("envio_recepcion_comprobantes");
+            return view('facturacion/envio_recepcion_comprobantes', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error Al Mostrar Contenido. Redireccionando Al Inicio'); window.location.href = '" . route('admin') . "';</script>";
+        }
+    }
+
+    public function notas_credito_debito(Request $request)
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista("notas_credito_debito");
+            return view('facturacion/notas_credito_debito', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error Al Mostrar Contenido. Redireccionando Al Inicio'); window.location.href = '" . route('admin') . "';</script>";
+        }
+    }
+
     public function pendiente_declarar(Request $request)
     {
         try {

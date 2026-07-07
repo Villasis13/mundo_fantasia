@@ -23,6 +23,10 @@ class RegistroVentas extends Component
     public int    $porPagina      = 20;
     public bool   $filtrado       = false;
 
+    // ── Reporte ───────────────────────────────────────────────
+    public string $reporteTipo    = 'A';
+    public string $empresaNombre  = '';
+
     // ── Tipos de pago (para rectificar) ───────────────────────
     public array $tiposPago = [];
 
@@ -122,6 +126,47 @@ class RegistroVentas extends Component
     public function reimprimir(int $idVenta): void
     {
         $this->dispatch('abrirComprobanteCaja', idVenta: $idVenta);
+    }
+
+    // ── Generar reporte PDF ───────────────────────────────────
+    public function generarReportePdf(): void
+    {
+        if ($this->reporteTipo === '') {
+            $this->dispatch('reporte-sin-tipo');
+            return;
+        }
+        $tipos = $this->reporteTipo;
+
+        $params = [
+            'desde'   => $this->filtroDesde,
+            'hasta'   => $this->filtroHasta,
+            'serie'   => $this->filtroSerie,
+            'numero'  => $this->filtroNumero,
+            'cliente' => $this->filtroCliente,
+            'pv'      => $this->filtroPuntoVenta,
+            'estado'  => $this->filtroEstado,
+            'tipos'   => $tipos,
+        ];
+        $url = route('Gestionventas.reporte_registro_ventas_pdf', $params);
+        $this->dispatch('abrirReportePdf', url: $url);
+    }
+
+    public function imprimirReporte(): void
+    {
+        if ($this->reporteTipo === '') {
+            $this->dispatch('reporte-sin-tipo');
+            return;
+        }
+        $params = [
+            'desde'   => $this->filtroDesde,
+            'hasta'   => $this->filtroHasta,
+            'cliente' => $this->filtroCliente,
+            'pv'      => $this->filtroPuntoVenta,
+            'estado'  => $this->filtroEstado,
+            'tipos'   => $this->reporteTipo,
+        ];
+        $url = route('Gestionventas.reporte_registro_ventas_escpos', $params);
+        $this->dispatch('imprimirReporteTicket', url: $url);
     }
 
     // ── Ver detalle del comprobante ───────────────────────────
@@ -339,6 +384,17 @@ class RegistroVentas extends Component
             foreach ($pagos as $p) {
                 $pagosPorVenta[$p->id_venta][] = $p->tipo_pago_nombre;
             }
+        }
+
+        // Nombre de empresa para el reporte
+        if ($this->empresaNombre === '') {
+            $idEmp = DB::table('user_tienda as ut')
+                ->join('tiendas as t', 't.id_tienda', '=', 'ut.id_tienda')
+                ->where('ut.id_users', auth()->user()->id_users)
+                ->value('t.id_empresa');
+            $this->empresaNombre = $idEmp
+                ? (string) DB::table('empresa')->where('id_empresa', $idEmp)->value('empresa_nombrecomercial')
+                : (string) DB::table('empresa')->where('empresa_estado', '!=', 0)->orderBy('id_empresa')->value('empresa_nombrecomercial');
         }
 
         // Puntos de venta = usuarios cajeros (rol 4) con permiso de cobrar (caja_pedidos.crear)

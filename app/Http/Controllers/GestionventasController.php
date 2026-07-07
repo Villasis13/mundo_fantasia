@@ -1488,6 +1488,507 @@ class GestionventasController extends Controller
         }
     }
 
+    /**
+     * Ticket en PDF con el MISMO diseño del ESC/POS (imprimir_ticketera_escpos),
+     * formato ticketera 80mm, fuente monoespaciada a 42 columnas.
+     */
+    public function imprimir_ticket_escpos_pdf()
+    {
+        $id_venta = (int) request('venta_id', 0);
+        if (!$id_venta) { abort(404); }
+
+        $dato_venta = $this->venta->listar_venta_x_id_pdf($id_venta);
+        if (!$dato_venta) { abort(404); }
+        $detalle_venta  = $this->venta->listar_venta_detalle_x_id_venta_pdf($id_venta);
+        $formas_de_pago = Ventas_detalle_pago::listar_formas_x_idventa($id_venta);
+
+        $COL = 42;
+
+        // ── Datos calculados (igual que el ESC/POS) ──
+        $formas_de_pago_mensaje = trim(collect($formas_de_pago)->pluck('tipo_pago_nombre')->implode(' '));
+        $fecha_obj        = \DateTime::createFromFormat('Y-m-d H:i:s', $dato_venta->venta_fecha);
+        $fecha_formateada = $fecha_obj ? $fecha_obj->format('d/m/Y') : '';
+        $hora_formateada  = $fecha_obj ? $fecha_obj->format('H:i:s') : '';
+
+        $serie_correlativo = $dato_venta->venta_serie . '-' . str_pad($dato_venta->venta_correlativo, 8, '0', STR_PAD_LEFT);
+        switch ($dato_venta->venta_tipo) {
+            case '01': $tipo_comprobante = 'FACTURA ELECTRONICA';        $dnni = 'RUC';       break;
+            case '03': $tipo_comprobante = 'BOLETA DE VENTA ELECTRONICA';$dnni = 'DNI';       break;
+            case '07': $tipo_comprobante = 'NOTA DE CREDITO ELECTRONICA';$dnni = 'DOCUMENTO'; break;
+            case '08': $tipo_comprobante = 'NOTA DE DEBITO ELECTRONICA'; $dnni = 'DOCUMENTO'; break;
+            default:   $tipo_comprobante = 'NOTA DE VENTA';              $dnni = 'DOCUMENTO'; break;
+        }
+        $documento = $dato_venta->cliente_numero;
+
+        $da         = new NumeroALetras();
+        $esGratuita = ((float)$dato_venta->venta_total == 0 && (float)$dato_venta->venta_totalgratuita > 0);
+        $importe_letra = $esGratuita
+            ? 'TRANSFERENCIA GRATUITA - Valor ref.: ' . $da->toInvoice((float)$dato_venta->venta_totalgratuita, '2', 'soles')
+            : $da->toInvoice((float)$dato_venta->venta_total, '2', 'soles');
+        $condicion_pago = $dato_venta->id_formas_pago == 1 ? 'CONTADO' : 'CREDITO';
+
+        $idTiendaCaja = DB::table('caja_numero')->where('id_caja_numero', $dato_venta->id_caja_numero)->value('id_tienda');
+        $sedesQuery = DB::table('tiendas')->where('id_empresa', $dato_venta->id_empresa)
+            ->where('tienda_estado', '!=', 0)->whereIn('tienda_tipo', [1, 2]);
+        if ($idTiendaCaja) { $sedesQuery->where('id_tienda', '!=', $idTiendaCaja); }
+        $sedes = $sedesQuery->orderBy('tienda_tipo')->orderBy('id_tienda')->get();
+
+        $subTotal = (float)$dato_venta->venta_totalgravada + (float)$dato_venta->venta_totalexonerada + (float)$dato_venta->venta_totalinafecta;
+        $sim = 'S/.';
+
+        // ── Constructor de líneas ──
+        $lines = [];
+        $push = function ($t, $a = 'L', $b = false, $s = 8, $h = 3.0) use (&$lines) { $lines[] = ['t' => $t, 'a' => $a, 'b' => $b, 's' => $s, 'h' => $h]; };
+        $sep  = function ($ch) use (&$lines, $COL) { $lines[] = ['t' => str_repeat($ch, $COL), 'a' => 'L', 'b' => false, 's' => 8, 'h' => 2.2]; };
+        $wrap = function ($t, $a = 'L', $b = false, $s = 8, $h = 3.0) use ($push, $COL) {
+            foreach (explode("\n", wordwrap((string)$t, $COL, "\n", true)) as $ln) { $push($ln, $a, $b, $s, $h); }
+        };
+        $rLine = function (string $label, string $value) use ($COL): string {
+            $lenLabel = mb_strlen($label, 'UTF-8'); $lenValue = mb_strlen($value, 'UTF-8');
+            if (($lenLabel + $lenValue) >= $COL) { return $label . $value; }
+            return str_pad($label, $COL - $lenValue) . $value;
+        };
+
+        // Cabecera empresa
+        $wrap($dato_venta->empresa_razon_social, 'C', true, 10, 4.2);
+        if (!empty(trim((string)$dato_venta->empresa_descripcion))) {
+            $wrap(str_replace('\n', "\n", (string)$dato_venta->empresa_descripcion), 'C');
+        }
+        $wrap($dato_venta->empresa_domiciliofiscal, 'C');
+        $wrap(($dato_venta->ubigeo_departamento ?? '') . '-' . ($dato_venta->ubigeo_provincia ?? '') . '-' . ($dato_venta->ubigeo_distrito ?? ''), 'C');
+        if (!empty($dato_venta->empresa_telefono1) || !empty($dato_venta->empresa_telefono2)) {
+            if (!empty($dato_venta->empresa_telefono1) && !empty($dato_venta->empresa_telefono2)) {
+                $telLinea = 'Cel. ' . $dato_venta->empresa_telefono1 . '  Telef: ' . $dato_venta->empresa_telefono2;
+            } elseif (!empty($dato_venta->empresa_telefono1)) { $telLinea = 'Cel. ' . $dato_venta->empresa_telefono1; }
+            else { $telLinea = 'Telef: ' . $dato_venta->empresa_telefono2; }
+            $wrap($telLinea, 'C');
+        }
+        if (!empty($dato_venta->empresa_correo)) { $wrap('Email: ' . $dato_venta->empresa_correo, 'C'); }
+        foreach ($sedes as $sede) {
+            $wrap($sede->tienda_nombre . (!empty($sede->tienda_direccion) ? ' - ' . $sede->tienda_direccion : ''), 'C');
+        }
+        $sep('-');
+        $push('RUC N: ' . $dato_venta->empresa_ruc, 'C', true);
+        $sep('=');
+
+        // Tipo comprobante
+        $push($tipo_comprobante, 'C', true, 10, 4.2);
+        $push($serie_correlativo, 'C', true, 9, 3.6);
+        if ($esGratuita) { $push('*** TRANSFERENCIA A TITULO GRATUITO ***', 'C'); }
+        $sep('-');
+
+        // Fecha / hora
+        $push(str_pad($fecha_formateada, $COL - strlen($hora_formateada)) . $hora_formateada, 'L');
+
+        // Cliente
+        $clienteNombre = ($dato_venta->id_tipo_documento != 4) ? $dato_venta->cliente_nombre : $dato_venta->cliente_razonsocial;
+        if (!empty(trim((string)$clienteNombre)))          { $wrap('Nomb: ' . $clienteNombre); }
+        if (!empty($dato_venta->cliente_direccion))        { $wrap('Direc: ' . $dato_venta->cliente_direccion); }
+        if (!empty($documento))                            { $push($dnni . ': ' . $documento, 'L'); }
+        $push('Condicion de Pago: ' . $condicion_pago, 'R');
+        $push('Forma de Pago: ' . $formas_de_pago_mensaje, 'R');
+
+        // Detalle
+        $sep('=');
+        $push(str_pad('Detalle', 22) . str_pad('P.Unit', 10, ' ', STR_PAD_LEFT) . str_pad('Total', 10, ' ', STR_PAD_LEFT), 'L', true);
+        $sep('-');
+        foreach ($detalle_venta as $f) {
+            $descripcion = (!empty($f->pro_codigo) ? $f->pro_codigo . ' ' : '') . $f->venta_detalle_nombre_producto;
+            $wrap($descripcion);
+            $numCantidad = number_format((float)$f->venta_detalle_cantidad, 0, '.', '');
+            $unidad = !empty($f->pres_nombre) ? $f->pres_nombre : (!empty($f->medida_codigo_unidad) ? $f->medida_codigo_unidad : 'Und');
+            $factor = (float)($f->pres_factor ?? 1.0);
+            $factorText = $factor > 1 ? number_format($factor, 0) : $numCantidad;
+            $cantTexto  = $unidad . ' x ' . $factorText;
+            $precioUnit = number_format(round((float)$f->venta_detalle_precio_unitario, 2), 2, '.', '');
+            $totalItem  = number_format(round((float)$f->venta_detalle_importe_total, 2), 2, '.', '');
+            $col1 = str_pad(mb_substr(str_pad($numCantidad, 4, ' ', STR_PAD_LEFT) . ' ' . $cantTexto, 0, 22), 22);
+            $col2 = str_pad($precioUnit, 10, ' ', STR_PAD_LEFT);
+            $col3 = str_pad($totalItem, 10, ' ', STR_PAD_LEFT);
+            $push($col1 . $col2 . $col3, 'L');
+        }
+        $sep('-');
+
+        // Subtotales
+        if ((float)$dato_venta->venta_totalgratuita > 0) { $push($rLine('Op.Grat:', $sim . ' ' . number_format((float)$dato_venta->venta_totalgratuita, 2)), 'L'); }
+        $push($rLine('SubTotal:', $sim . ' ' . number_format($subTotal, 2)), 'L');
+        $push($rLine('I.G.V.:',   $sim . ' ' . number_format((float)$dato_venta->venta_totaligv, 2)), 'L');
+        $push($rLine('ICBPER:',   $sim . ' ' . number_format((float)$dato_venta->venta_icbper, 2)), 'L');
+        $push($rLine('Cp Exon:',  $sim . ' ' . number_format((float)$dato_venta->venta_totalexonerada, 2)), 'L');
+        $sep('=');
+        $push($rLine('Imp.Total:', $sim . ' ' . number_format((float)$dato_venta->venta_total, 2)), 'L', true);
+        $sep('=');
+
+        // Importe en letras
+        $wrap('Son: ' . $importe_letra);
+
+        // Desglose de pagos
+        if ($dato_venta->id_formas_pago == 1 && !$esGratuita) {
+            foreach ($formas_de_pago as $for) {
+                $push($rLine($for->tipo_pago_nombre . ':', $sim . ' ' . number_format((float)$for->venta_detalle_pago_monto, 2)), 'L');
+            }
+            $push($rLine('Vuelto:', $sim . ' ' . number_format((float)$dato_venta->venta_vuelto, 2)), 'L');
+        }
+
+        // QR
+        if ($dato_venta->venta_tipo != '20') {
+            try { $rutaQr = $this->general->generar_qr($id_venta); } catch (\Throwable $e) { $rutaQr = null; }
+            if ($rutaQr && file_exists($rutaQr)) { $lines[] = ['qr' => $rutaQr]; }
+        }
+
+        // Punto de venta / vendedor
+        $push('Pto.Venta: ' . (!empty($dato_venta->tienda_nombre) ? $dato_venta->tienda_nombre : '-'), 'C');
+        $push('Vendedor: ' . $dato_venta->nombre_users, 'C');
+
+        // Pie
+        $sep('-');
+        $wrap('BIENES TRANSFERIDOS EN LA AMAZONIA PARA SER CONSUMIDOS EN LA MISMA', 'C');
+        $wrap('** Una vez salida la mercaderia, no se aceptan cambios ni devoluciones **', 'C');
+        $push('** Gracias por su Compra **', 'C', true);
+        if ($dato_venta->venta_tipo != '20') {
+            if (!empty($dato_venta->venta_codigo_hash)) { $wrap('CODIGO HASH: ' . $dato_venta->venta_codigo_hash, 'C'); }
+            $wrap('Consulte validez en: http://e.consulta.sunat.gob.pe/ol-ti-itconsvalcpe/ConsVCpe.htm', 'C');
+            $wrap('Representacion impresa de comprobante de pago electronico', 'C');
+        }
+
+        // ── Altura total del ticket ──
+        $alto = 8; // margen sup+inf
+        foreach ($lines as $ln) { $alto += isset($ln['qr']) ? 30 : $ln['h']; }
+
+        $pdf = new PDFBufeo('P', 'mm', [80, max(60, $alto)]);
+        $pdf->SetMargins(4, 4, 4);
+        $pdf->SetAutoPageBreak(false);
+        $pdf->AddPage();
+        $pdf->SetY(4);
+
+        foreach ($lines as $ln) {
+            if (isset($ln['qr'])) {
+                $pdf->Image($ln['qr'], (80 - 26) / 2, $pdf->GetY(), 26, 26);
+                $pdf->SetY($pdf->GetY() + 28);
+                continue;
+            }
+            $pdf->SetFont('Courier', $ln['b'] ? 'B' : '', $ln['s']);
+            $pdf->SetX(4);
+            $pdf->Cell(72, $ln['h'], utf8_decode($ln['t']), 0, 1, $ln['a']);
+        }
+
+        $pdf->Output('I', 'ticket-' . $serie_correlativo . '.pdf');
+        exit;
+    }
+
+    /**
+     * Reporte de Registro de Ventas en PDF, según filtros y tipo (A/B/C/E).
+     * (Versión funcional; el diseño específico por tipo se ajustará según los formatos SIGA.)
+     */
+    /**
+     * Construye las líneas del Resumen de Ventas (formato ticket 42 columnas)
+     * reutilizable por el PDF y por la impresión ESC/POS.
+     * @return array{0: array, 1: array} [$lines, $tipos]
+     */
+    private function resumenVentasLineas($desde, $hasta, int $pv, array $tipos): array
+    {
+        $idEmp = DB::table('user_tienda as ut')
+            ->join('tiendas as t', 't.id_tienda', '=', 'ut.id_tienda')
+            ->where('ut.id_users', auth()->user()->id_users)->value('t.id_empresa');
+        $empresa = $idEmp
+            ? DB::table('empresa')->where('id_empresa', $idEmp)->first()
+            : DB::table('empresa')->where('empresa_estado', '!=', 0)->orderBy('id_empresa')->first();
+
+        $tipos = array_values($tipos);
+        if (empty($tipos)) { $tipos = ['A']; }
+
+        // ── Base de consulta con filtros ──
+        $base = function () use ($desde, $hasta, $pv, $idEmp) {
+            $q = DB::table('ventas as v');
+            if ($idEmp)   { $q->where('v.id_empresa', $idEmp); }
+            if ($desde)   { $q->whereDate('v.venta_fecha', '>=', $desde); }
+            if ($hasta)   { $q->whereDate('v.venta_fecha', '<=', $hasta); }
+            if ($pv > 0)  { $q->where('v.id_users', $pv); }
+            return $q;
+        };
+        $activo = fn($q) => $q->where(fn($w) => $w->where('v.anulado_sunat', '!=', 1)->orWhereNull('v.anulado_sunat'));
+
+        // ── Agregados por tipo de comprobante ──
+        $porTipo = function ($vt) use ($base, $activo) {
+            $qA = $activo($base())->where('v.venta_tipo', $vt);
+            $first = (clone $qA)->orderBy('v.id_venta')->first(['venta_serie', 'venta_correlativo']);
+            $last  = (clone $qA)->orderByDesc('v.id_venta')->first(['venta_serie', 'venta_correlativo']);
+            $fmt = fn($r) => $r ? $r->venta_serie . '-' . str_pad($r->venta_correlativo, 8, '0', STR_PAD_LEFT) : '-00000000';
+            $anul = $base()->where('v.venta_tipo', $vt)->where('v.anulado_sunat', 1);
+            return [
+                'ini'        => $fmt($first),
+                'fin'        => $fmt($last),
+                'total'      => (float) (clone $qA)->sum('v.venta_total'),
+                'anul_cant'  => (int) (clone $anul)->count(),
+                'anul_total' => (float) (clone $anul)->sum('v.venta_total'),
+            ];
+        };
+        $nv  = $porTipo('20');
+        $bol = $porTipo('03');
+        $fac = $porTipo('01');
+        $totalGeneral = $nv['total'] + $bol['total'] + $fac['total'];
+        $transacciones = (int) $activo($base())->whereIn('v.venta_tipo', ['01', '03', '20'])->count();
+
+        // ── Tipos de pago ──
+        $pagosRows = $activo($base())
+            ->join('ventas_detalle_pagos as vdp', 'vdp.id_venta', '=', 'v.id_venta')
+            ->join('tipo_pago as tp', 'tp.id_tipo_pago', '=', 'vdp.id_tipo_pago')
+            ->whereIn('v.venta_tipo', ['01', '03', '20'])
+            ->where('vdp.venta_detalle_pago_estado', 1)
+            ->groupBy('tp.tipo_pago_nombre')
+            ->select('tp.tipo_pago_nombre as n', DB::raw('SUM(vdp.venta_detalle_pago_monto) as m'))
+            ->get();
+        $pg = fn($needle) => (float) ($pagosRows->first(fn($r) => str_contains(mb_strtoupper($r->n), $needle))->m ?? 0);
+        $creditoTotal = (float) $activo($base())->whereIn('v.venta_tipo', ['01', '03', '20'])->where('v.id_formas_pago', 2)->sum('v.venta_total');
+        $efectivo = $pg('EFECTIVO'); $deposito = $pg('DEPOSITO'); $cheque = $pg('CHEQUE');
+        $plin = $pg('PLIN'); $yape = $pg('YAPE'); $tarjeta = $pg('TARJETA');
+        $marcas = $activo($base())
+            ->join('ventas_detalle_pagos as vdp', 'vdp.id_venta', '=', 'v.id_venta')
+            ->whereIn('v.venta_tipo', ['01', '03', '20'])
+            ->where('vdp.venta_detalle_pago_estado', 1)->whereNotNull('vdp.marca_tarjeta')
+            ->groupBy('vdp.marca_tarjeta')
+            ->select('vdp.marca_tarjeta as n', DB::raw('SUM(vdp.venta_detalle_pago_monto) as m'))->get();
+        $mk = fn($needle) => (float) ($marcas->first(fn($r) => str_contains(mb_strtoupper((string)$r->n), $needle))->m ?? 0);
+        $totalPagos = $creditoTotal + $efectivo + $deposito + $cheque + $plin + $yape + $tarjeta;
+
+        // ── Ventas x vendedor ──
+        $vendedores = $activo($base())
+            ->join('users as u', 'u.id_users', '=', 'v.id_users')
+            ->whereIn('v.venta_tipo', ['01', '03', '20'])
+            ->groupBy('u.nombre_users')
+            ->select('u.nombre_users as n', DB::raw('SUM(v.venta_total) as m'))
+            ->orderByDesc(DB::raw('SUM(v.venta_total)'))->get();
+
+        // ── Notas ──
+        $ncTotal = (float) $activo($base())->where('v.venta_tipo', '07')->sum('v.venta_total');
+        $ndTotal = (float) $activo($base())->where('v.venta_tipo', '08')->sum('v.venta_total');
+        $ventasEfectivo = $efectivo; // total en efectivo
+
+        // Placeholders (se conectarán a sus fuentes: amortizaciones, gastos, caja chica, compras, anticipos)
+        $amortizaciones = 0.0; $cajaChica = 0.0; $gastosOper = 0.0; $comprasT = 0.0; $anticipos = 0.0;
+
+        $operador = $pv > 0 ? (DB::table('users')->where('id_users', $pv)->value('nombre_users') ?? 'TODOS') : 'TODOS';
+        $hora = now()->format('H:i:s');
+
+        // ════════════════════════════════════════════════════════════
+        // Construcción del ticket
+        // ════════════════════════════════════════════════════════════
+        $COL = 42;
+        $lines = [];
+        $push = function ($t, $a = 'L', $b = false, $s = 8, $h = 3.0) use (&$lines) { $lines[] = ['t' => $t, 'a' => $a, 'b' => $b, 's' => $s, 'h' => $h]; };
+        $sep  = function () use (&$lines, $COL) { $lines[] = ['t' => str_repeat('-', $COL), 'a' => 'L', 'b' => false, 's' => 8, 'h' => 2.0]; };
+        $tit  = function ($t) use (&$lines) { $lines[] = ['t' => $t, 'a' => 'C', 'b' => true, 's' => 9, 'h' => 4.0]; };
+        // label ... S/. monto (derecha)
+        $r3 = function ($label, $monto) use ($COL) {
+            $right = 'S/. ' . str_pad(number_format((float)$monto, 2), 12, ' ', STR_PAD_LEFT);
+            return str_pad($label, max(0, $COL - strlen($right))) . $right;
+        };
+        // label ... valor(texto) derecha
+        $rt = function ($label, $val) use ($COL) {
+            $val = (string) $val;
+            return str_pad($label, max(0, $COL - strlen($val))) . $val;
+        };
+        // label ... monto (sin S/.)
+        $r2 = function ($label, $monto) use ($COL) {
+            $right = str_pad(number_format((float)$monto, 2), 12, ' ', STR_PAD_LEFT);
+            return str_pad(mb_substr($label, 0, $COL - 12), max(0, $COL - 12)) . $right;
+        };
+
+        $render1Tipo = function ($tp) use (
+            &$lines, $push, $sep, $tit, $r3, $rt, $r2, $COL,
+            $empresa, $desde, $hasta, $hora, $operador, $transacciones,
+            $nv, $bol, $fac, $totalGeneral,
+            $creditoTotal, $efectivo, $deposito, $cheque, $plin, $yape, $tarjeta, $totalPagos, $mk,
+            $vendedores, $ncTotal, $ndTotal, $ventasEfectivo,
+            $amortizaciones, $cajaChica, $gastosOper, $comprasT, $anticipos
+        ) {
+            $conAmort  = in_array($tp, ['C', 'E']);
+            $conGastos = in_array($tp, ['B', 'E']);
+            $conCompras = $tp === 'E';
+
+            $push($empresa->empresa_razon_social ?? '', 'C', true, 9, 3.8);
+            $tit('Resumen de Ventas');
+            $sep();
+            $push($rt('Fecha Inicio', $desde ? date('d/m/Y', strtotime($desde)) : '-'));
+            $push($rt('Fecha Fin',    $hasta ? date('d/m/Y', strtotime($hasta)) : '-'));
+            $push($rt('Hora',         $hora));
+            $push($rt('Operador',     $operador));
+            $sep();
+            $push($rt('Nro. de Transacciones', (string) $transacciones));
+            $sep();
+            $push($rt('Nro Nota Venta Inicial', $nv['ini']));
+            $push($rt('Nro Nota Venta Final',   $nv['fin']));
+            $push($r3('Venta Total Nota Venta', $nv['total']));
+            $push($rt('Nro. NotaVta Anulados', (string) $nv['anul_cant']));
+            $push($r3('Total NotaVta Anulados', $nv['anul_total']));
+            $sep();
+            $push($rt('Nro de Boleta Inicial', $bol['ini']));
+            $push($rt('Nro de Boleta Final',   $bol['fin']));
+            $push($r3('Venta Total Boleta', $bol['total']));
+            $push($rt('Nro. Boletas Anulados', (string) $bol['anul_cant']));
+            $push($r3('Total Boletas Anuladas', $bol['anul_total']));
+            $sep();
+            $push($rt('Nro de Factura Inicial', $fac['ini']));
+            $push($rt('Nro de Factura Final',   $fac['fin']));
+            $push($r3('Venta Total Facturas', $fac['total']));
+            $push($rt('Nro. Facturas Anuladas', (string) $fac['anul_cant']));
+            $push($r3('Tot. Facturas Anuladas', $fac['anul_total']));
+            $sep();
+            $tit('Total de Ventas');
+            $push($r3('Venta Total Nota Vta', $nv['total']));
+            $push($r3('Venta Total Boleta',   $bol['total']));
+            $push($r3('Venta Total Facturas', $fac['total']));
+            if ($conAmort) { $push($r3('Amortizaciones', $amortizaciones)); }
+            $push($r3('Total  General', $totalGeneral), 'L', true);
+            $sep();
+            $tit('Tipos de Pago');
+            $push($r3('Credito',  $creditoTotal));
+            $push($r3('Efectivo', $efectivo));
+            $push($r3('Deposito', $deposito));
+            $push($r3('Cheque',   $cheque));
+            $push($r3('Plin',     $plin));
+            $push($r3('Yape',     $yape));
+            $push($r3('Tarjeta',  $tarjeta));
+            $push('        ' . $r3('  Visa',     $mk('VISA')));
+            $push('        ' . $r3('  Amex',     $mk('AMEX')));
+            $push('        ' . $r3('  Master.Ca', $mk('MASTER')));
+            $push('        ' . $r3('  Diners',   $mk('DINERS')));
+            $sep();
+            $push($r3('Total', $totalPagos), 'L', true);
+            $sep();
+            $tit('Ventas x Vendedor');
+            foreach ($vendedores as $vd) { $push($r2($vd->n, $vd->m)); }
+            $sep();
+
+            // ── SALDO DE CAJA ──
+            $tit('Saldo de Caja');
+            $push($r3('Total Ventas', $totalGeneral));
+            if ($conAmort) { $push($r3('Amortizaciones', $amortizaciones)); }
+            $push($r3('Total Nota Credito', $ncTotal));
+            $push($r3('Total Nota Debito',  $ndTotal));
+            $push($r3('Total Saldo de Venta', $totalGeneral + $amortizaciones - $ncTotal + $ndTotal), 'L', true);
+            $sep();
+            $tit('Saldo de Caja (Efectivo)');
+            $push($r3('Total Ventas Efectivo', $ventasEfectivo));
+            $push($r3('Total Nota Credito', 0));
+            $push($r3('Total Nota Debito',  0));
+            $push($r3('Total Venta Efectivo', $ventasEfectivo), 'L', true);
+            $push($r3('Pagos Anticip/Vinculado', $anticipos));
+            $push($r3('Total Venta Efectivo', $ventasEfectivo - $anticipos), 'L', true);
+
+            if ($conGastos) {
+                $sep();
+                $tit($conCompras ? 'Gastos Operativos, Caja Chica, Compras' : 'Gastos Operativos y Caja Chica');
+                $push($r3('Caja Chica/Otros Ingr', $cajaChica));
+                $push($r3('Gastos Operativos', $gastosOper));
+                if ($conCompras) { $push($r3('Compras', $comprasT)); }
+                $push($r3('Sub Total', $cajaChica - $gastosOper - ($conCompras ? $comprasT : 0)), 'L', true);
+                $push($r3('Saldo', $ventasEfectivo + $cajaChica - $gastosOper - ($conCompras ? $comprasT : 0)), 'L', true);
+                $push($r3('Pagos Anticip/Vinculado', $anticipos));
+                $push($r3('Saldo Final', $ventasEfectivo + $cajaChica - $gastosOper - ($conCompras ? $comprasT : 0) - $anticipos), 'L', true);
+            }
+        };
+
+        foreach ($tipos as $i => $tp) {
+            if ($i > 0) { $lines[] = ['t' => str_repeat('=', $COL), 'a' => 'L', 'b' => false, 's' => 8, 'h' => 4.0]; }
+            $render1Tipo($tp);
+        }
+
+        return [$lines, $tipos];
+    }
+
+    private function resumenVentasParams(): array
+    {
+        return [
+            request('desde'),
+            request('hasta'),
+            (int) request('pv', 0),
+            array_filter(explode(',', (string) request('tipos', ''))),
+        ];
+    }
+
+    public function reporte_registro_ventas_pdf()
+    {
+        [$desde, $hasta, $pv, $tipos] = $this->resumenVentasParams();
+        [$lines, $tipos] = $this->resumenVentasLineas($desde, $hasta, $pv, $tipos);
+
+        $alto = 10;
+        foreach ($lines as $ln) { $alto += $ln['h']; }
+
+        $pdf = new PDFBufeo('P', 'mm', [80, max(80, $alto)]);
+        $pdf->SetMargins(4, 4, 4);
+        $pdf->SetAutoPageBreak(false);
+        $pdf->AddPage();
+        $pdf->SetY(4);
+        foreach ($lines as $ln) {
+            $pdf->SetFont('Courier', $ln['b'] ? 'B' : '', $ln['s']);
+            $pdf->SetX(4);
+            $pdf->Cell(72, $ln['h'], utf8_decode($ln['t']), 0, 1, $ln['a']);
+        }
+        $pdf->Output('I', 'resumen-ventas-' . implode('', $tipos) . '.pdf');
+        exit;
+    }
+
+    /**
+     * Imprime el Resumen de Ventas en la ticketera (ESC/POS) vía el agente de impresión,
+     * igual que el flujo de venta (imprimir_ticketera_escpos).
+     */
+    public function reporte_registro_ventas_escpos()
+    {
+        try {
+            [$desde, $hasta, $pv, $tipos] = $this->resumenVentasParams();
+            [$lines] = $this->resumenVentasLineas($desde, $hasta, $pv, $tipos);
+
+            $u = function (string $s): string {
+                $enc = mb_detect_encoding($s, ['UTF-8', 'ISO-8859-1', 'Windows-1252', 'ASCII'], true);
+                if ($enc && $enc !== 'UTF-8') { $s = mb_convert_encoding($s, 'UTF-8', $enc); }
+                return preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $s);
+            };
+
+            $tmp       = tempnam(sys_get_temp_dir(), 'resumen_');
+            $connector = new FilePrintConnector($tmp);
+            $printer   = new Printer($connector);
+            $printer->initialize();
+
+            foreach ($lines as $ln) {
+                $printer->setJustification(
+                    $ln['a'] === 'C' ? Printer::JUSTIFY_CENTER
+                    : ($ln['a'] === 'R' ? Printer::JUSTIFY_RIGHT : Printer::JUSTIFY_LEFT)
+                );
+                if (!empty($ln['b'])) { $printer->selectPrintMode(Printer::MODE_EMPHASIZED); }
+                $printer->text($u($ln['t']) . "\n");
+                if (!empty($ln['b'])) { $printer->selectPrintMode(); }
+            }
+            $printer->setJustification(Printer::JUSTIFY_LEFT);
+            $printer->feed(3);
+            $printer->cut();
+            $printer->close();
+
+            $escposData = file_get_contents($tmp);
+            @unlink($tmp);
+            if ($escposData === false || strlen($escposData) === 0) {
+                throw new \Exception('No se pudo generar el ticket del resumen.');
+            }
+
+            $ip_cliente = request()->ip();
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->post(
+                "http://{$ip_cliente}:8091/imprimir_raw",
+                ['token' => 'mundofantasia2026', 'escpos_base64' => base64_encode($escposData)]
+            );
+            if (!$response->successful()) {
+                throw new \Exception('El agente de impresion no respondio. Verifica que iniciar_agente.bat este abierto.');
+            }
+            $result = $response->json();
+            if (!($result['ok'] ?? false)) {
+                throw new \Exception('Error en el agente: ' . ($result['mensaje'] ?? 'desconocido'));
+            }
+            return response()->json(['ok' => true]);
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            return response()->json(['ok' => false, 'error' => $e->getMessage()]);
+        }
+    }
+
     public function imprimir_resumen_caja()
     {
         $idCaja = (int) request('caja_id', 0);

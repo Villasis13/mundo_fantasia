@@ -95,6 +95,22 @@ class KardexVarorizado extends Component
 
         $this->cargarEmpresas();
 
+        // Seleccionar la primera empresa por defecto
+        if ($this->ubicacionKey === '') {
+            $primeraEmpresa = DB::table('empresa')
+                ->where('empresa_estado', '!=', 0)
+                ->orderBy('empresa_nombrecomercial')
+                ->value('id_empresa');
+            if ($primeraEmpresa) {
+                $this->ubicacionKey = 'empresa_' . $primeraEmpresa;
+                $this->sucursalesDisponibles = DB::table('tiendas')
+                    ->where('id_empresa', $primeraEmpresa)
+                    ->where('tienda_estado', 1)
+                    ->orderBy('tienda_nombre')
+                    ->get(['id_tienda', 'tienda_nombre']);
+            }
+        }
+
         $this->almacenesDisponibles = DB::table('almacen')
             ->join('empresa as e', 'e.id_empresa', '=', 'almacen.id_empresa')
             ->where('almacen.almacen_estado', 1)
@@ -196,6 +212,7 @@ public function updatedUbicacionKey(): void
     {
         return match(strtolower((string) $tipoRef)) {
             'compra'              => '01',
+            'venta'               => '01',
             'transferencia'       => '09',
             'merma_transferencia' => '09',
             'nota'                => '07',
@@ -209,6 +226,7 @@ public function updatedUbicacionKey(): void
     {
         return match(strtolower((string) $tipoRef)) {
             'compra'              => '02',
+            'venta'               => '01',
             'merma_compra'        => '13',
             'anulacion_compra'    => '05',
             'nc_compra'           => '05',

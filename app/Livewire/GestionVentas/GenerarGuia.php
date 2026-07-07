@@ -95,6 +95,19 @@ class GenerarGuia extends Component
             $this->idEmpresa = (int) $tienda->id_empresa;
         }
 
+        // Dirección y ubigeo de salida por defecto = domicilio fiscal de la empresa
+        if ($this->idEmpresa) {
+            $emp = DB::table('empresa')->where('id_empresa', $this->idEmpresa)
+                ->first(['empresa_domiciliofiscal', 'id_ubigeo']);
+            if ($emp) {
+                $this->dirPartida = (string) ($emp->empresa_domiciliofiscal ?? '');
+                if (!empty($emp->id_ubigeo)) {
+                    $this->ubigeoPartida = (string) (DB::table('ubigeo')
+                        ->where('id_ubigeo', $emp->id_ubigeo)->value('ubigeo_cod') ?? '');
+                }
+            }
+        }
+
         $this->guiaEmision  = now()->format('Y-m-d');
         $this->guiaTraslado = now()->format('Y-m-d');
     }

@@ -282,6 +282,7 @@
                         </span>
                     </button>
                     @endcan
+
                     @can('registro_compras.crear')
                     <button class="btn btn-primary fw-semibold" wire:click="nuevaOrden">
                         <i class="fa-solid fa-plus me-1"></i> Nueva Compra
@@ -546,6 +547,10 @@
                 <i class="fa-solid fa-file-invoice me-2 text-primary"></i>Registro de Ingresos - Compras
             </h5>
         </div>
+        <div class="d-flex gap-2">
+        <button class="btn btn-warning fw-semibold" wire:click="cargarTransito">
+            <i class="fa-solid fa-truck me-1"></i> Compras en Tránsito
+        </button>
         <button class="btn btn-primary fw-semibold px-4"
                 wire:click="guardarOrden" wire:loading.attr="disabled" wire:target="guardarOrden">
             <span wire:loading.remove wire:target="guardarOrden">
@@ -555,6 +560,7 @@
                 <span class="spinner-border spinner-border-sm me-1"></span> Guardando...
             </span>
         </button>
+        </div>
     </div>
 
     {{-- ══ BLOQUE 1 — Datos del Comprobante (ancho completo) ══ --}}
@@ -1484,8 +1490,94 @@
         </div>
     </div>
 
-    <div wire:loading wire:target="nuevaOrden, volverHistorial, guardarOrden, agregarProducto, anularOrden, recibirOrden, condicionPago, seleccionarPresentacionCompra, toggleRevertirIgv">
+    <div wire:loading wire:target="nuevaOrden, volverHistorial, guardarOrden, agregarProducto, anularOrden, recibirOrden, condicionPago, seleccionarPresentacionCompra, toggleRevertirIgv, cargarTransito, procesarTransito">
         <x-loader />
+    </div>
+
+    {{-- ══════ MODAL: COMPRAS EN TRÁNSITO ══════ --}}
+    <div class="modal fade" id="modalTransito" wire:ignore.self tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-truck text-warning me-2"></i>Compras en Tránsito</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    @if(session('successTransito'))
+                        <div class="alert alert-success alert-dismissible d-flex align-items-center gap-2 py-2">
+                            <i class="fa-solid fa-circle-check"></i><span>{{ session('successTransito') }}</span>
+                            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+                        </div>
+                    @endif
+                    @if(session('errorTransito'))
+                        <div class="alert alert-danger alert-dismissible d-flex align-items-center gap-2 py-2">
+                            <i class="fa-solid fa-circle-xmark"></i><span>{{ session('errorTransito') }}</span>
+                            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+                        </div>
+                    @endif
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:60px;">Ítem</th>
+                                    <th>Tipo de Comprobante</th>
+                                    <th>Serie y Correlativo</th>
+                                    <th class="text-center" style="width:150px;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($comprasTransito as $i => $t)
+                                    @php
+                                        $tipoLbl = ['01'=>'Factura','03'=>'Boleta','07'=>'Nota de Crédito','08'=>'Nota de Débito','09'=>'Guía','12'=>'Ticket'][$t['orden_compra_tipo_doc']] ?? ($t['orden_compra_tipo_doc'] ?: '—');
+                                    @endphp
+                                    <tr wire:key="transito-{{ $t['id_orden_compra'] }}">
+                                        <td>{{ $i + 1 }}</td>
+                                        <td><span class="badge bg-light text-dark border">{{ $tipoLbl }}</span></td>
+                                        <td class="fw-semibold">{{ $t['orden_compra_numero_doc'] ?: $t['orden_compra_numero'] }}</td>
+                                        <td class="text-center">
+                                            <button class="btn btn-sm btn-success" wire:click="confirmarTransito({{ $t['id_orden_compra'] }})">
+                                                <i class="fa-solid fa-box-open me-1"></i>Confirmar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="4" class="text-center text-muted py-4">
+                                        <i class="fa-solid fa-inbox fa-2x d-block mb-2 opacity-50"></i>No hay compras en tránsito.
+                                    </td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ══════ MODAL: CONFIRMAR RECEPCIÓN (sí/no) ══════ --}}
+    <div class="modal fade" id="modalConfirmarTransito" wire:ignore.self tabindex="-1"
+         data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-box-open text-success me-2"></i>Confirmar Recepción</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">¿Confirmar la recepción de esta compra? Su estado cambiará a <b>Recibido</b> y se <b>sumará el stock</b> de cada producto.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">No</button>
+                    <button type="button" class="btn btn-success fw-semibold"
+                            wire:click="procesarTransito" wire:loading.attr="disabled" wire:target="procesarTransito">
+                        <span wire:loading.remove wire:target="procesarTransito"><i class="fa-solid fa-check me-1"></i>Sí, confirmar</span>
+                        <span wire:loading wire:target="procesarTransito"><span class="spinner-border spinner-border-sm me-1"></span> Procesando...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     @script
@@ -1517,6 +1609,16 @@
         });
         $wire.on('cerrarModalRecibir', () => {
             const m = bootstrap.Modal.getInstance(document.getElementById('modalRecibir'));
+            if (m) m.hide();
+        });
+        $wire.on('abrirModalTransito', () => {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalTransito')).show();
+        });
+        $wire.on('abrirModalConfirmarTransito', () => {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfirmarTransito')).show();
+        });
+        $wire.on('cerrarModalConfirmarTransito', () => {
+            const m = bootstrap.Modal.getInstance(document.getElementById('modalConfirmarTransito'));
             if (m) m.hide();
         });
         $wire.on('abrirModalSunat', () => {

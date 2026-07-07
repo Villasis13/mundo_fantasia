@@ -57,25 +57,15 @@
         <div class="card-body py-3">
             <div class="row g-2 align-items-end">
 
-                {{-- Almacén / Empresa (select combinado igual que Origen en Transferencias) --}}
+                {{-- Empresa --}}
                 <div class="col-12 col-sm-6 col-lg-3">
-                    <label class="form-label form-label-sm mb-1">Almacén / Empresa <span class="text-danger">*</span></label>
+                    <label class="form-label form-label-sm mb-1">Empresa <span class="text-danger">*</span></label>
                     <select wire:model.live="ubicacionKey" class="form-select form-select-sm @error('ubicacionKey') is-invalid @enderror">
-                        <option value="">— Seleccione —</option>
-                        @if(count($almacenesDisponibles) > 0)
-                            <optgroup label="Almacenes">
-                                @foreach($almacenesDisponibles as $alm)
-                                    <option value="almacen_{{ $alm->id_almacen }}">{{ $alm->almacen_nombre }}</option>
-                                @endforeach
-                            </optgroup>
-                        @endif
-                        @if(count($empresas) > 0)
-                            <optgroup label="Empresas / Sedes">
-                                @foreach($empresas as $emp)
-                                    <option value="empresa_{{ $emp->id_empresa }}">{{ $emp->empresa_nombrecomercial }}</option>
-                                @endforeach
-                            </optgroup>
-                        @endif
+                        @forelse($empresas as $emp)
+                            <option value="empresa_{{ $emp->id_empresa }}">{{ $emp->empresa_nombrecomercial }}</option>
+                        @empty
+                            <option value="">— Sin empresas —</option>
+                        @endforelse
                     </select>
                     @error('ubicacionKey')
                         <div class="invalid-feedback">{{ $message }}</div>

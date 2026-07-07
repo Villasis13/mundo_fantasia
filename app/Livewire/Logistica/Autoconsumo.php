@@ -20,6 +20,7 @@ class Autoconsumo extends Component
     // ── Formulario ────────────────────────────────────────────────
     public string $area          = 'Administración';
     public string $autorizacion  = '';
+    public string $motivo        = '';
     public string $fechaEmision  = '';
 
     // ── Búsqueda de productos ─────────────────────────────────────
@@ -343,6 +344,7 @@ class Autoconsumo extends Component
                 'id_tienda'                => $tndId,
                 'autoconsumo_area'         => $this->area,
                 'autoconsumo_autorizacion' => null,
+                'autoconsumo_motivo'       => trim($this->motivo) !== '' ? trim($this->motivo) : null,
                 'autoconsumo_fecha'        => $this->fechaEmision,
                 'id_users'                 => auth()->user()->id_users,
                 'autoconsumo_estado'       => 'registrado',
@@ -358,7 +360,7 @@ class Autoconsumo extends Component
                 'movimientos_productos_fecha_creacion' => now(),
                 'movimientos_productos_tipo'           => 2,
                 'movimientos_productos_estado'         => 1,
-                'movimientos_productos_motivo'         => "Autoconsumo {$numero} — Área: {$this->area} — Autorizado: {$this->autorizacion}",
+                'movimientos_productos_motivo'         => "Autoconsumo {$numero} — Área: {$this->area}" . (trim($this->motivo) !== '' ? " — Motivo: {$this->motivo}" : ''),
                 'concepto'                             => 'autoconsumo',
                 'created_at'                           => now(),
                 'updated_at'                           => now(),
@@ -429,6 +431,7 @@ class Autoconsumo extends Component
         $this->reset(['ubicacionKey', 'idTienda', 'buscarProducto', 'resultados', 'items', 'idAutoconsumoActivo', 'presentacionesPendientes', 'productoPendienteData']);
         $this->area          = 'Administración';
         $this->autorizacion  = '';
+        $this->motivo        = '';
         $this->fechaEmision  = now()->format('Y-m-d');
         $this->resetErrorBag();
         $this->autoResolverUbicacion();

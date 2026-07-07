@@ -47,8 +47,8 @@
                             <strong>{{ $detalleAutoconsumo->autoconsumo_area }}</strong>
                         </div>
                         <div class="col-md-3">
-                            <small class="text-muted d-block">Autorizado por</small>
-                            <strong>{{ $detalleAutoconsumo->autoconsumo_autorizacion }}</strong>
+                            <small class="text-muted d-block">Motivo</small>
+                            <strong>{{ $detalleAutoconsumo->autoconsumo_motivo ?: '—' }}</strong>
                         </div>
                         <div class="col-md-3">
                             <small class="text-muted d-block">Fecha</small>
@@ -147,7 +147,6 @@
                     </select>
                 </div>
 
-
                 <div class="col-md-2">
                     <label class="form-label fw-semibold">
                         <i class="fa-solid fa-calendar-day me-1 text-secondary"></i>
@@ -156,6 +155,15 @@
                     <input type="date" wire:model="fechaEmision"
                            class="form-control @error('fechaEmision') is-invalid @enderror">
                     @error('fechaEmision') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-comment me-1 text-secondary"></i>
+                        Motivo <span class="text-muted small">(opcional)</span>
+                    </label>
+                    <textarea wire:model="motivo" class="form-control" rows="2"
+                              placeholder="Describa el motivo del autoconsumo (opcional)"></textarea>
                 </div>
             </div>
 
@@ -346,8 +354,8 @@
                     <strong>{{ $revisionAutoconsumo->autoconsumo_area }}</strong>
                 </div>
                 <div class="col-sm-6 col-md-4">
-                    <small class="text-muted d-block">Autorizado por</small>
-                    <strong>{{ $revisionAutoconsumo->autoconsumo_autorizacion }}</strong>
+                    <small class="text-muted d-block">Motivo</small>
+                    <strong>{{ $revisionAutoconsumo->autoconsumo_motivo ?: '—' }}</strong>
                 </div>
                 <div class="col-sm-6 col-md-2">
                     <small class="text-muted d-block">Estado</small>
@@ -466,7 +474,7 @@
                             <th>N° Autoconsumo</th>
                             <th>Ubicación</th>
                             <th>Área</th>
-                            <th>Autorizado por</th>
+                            <th>Motivo</th>
                             <th>Fecha</th>
                             <th class="text-center">Productos</th>
                             <th class="text-center">Estado</th>
@@ -485,7 +493,7 @@
                                 @endif
                             </td>
                             <td>{{ $ac->autoconsumo_area }}</td>
-                            <td class="text-muted">{{ $ac->autoconsumo_autorizacion }}</td>
+                            <td class="text-muted">{{ \Illuminate\Support\Str::limit($ac->autoconsumo_motivo, 40) ?: '—' }}</td>
                             <td><small>{{ \Carbon\Carbon::parse($ac->autoconsumo_fecha)->format('d/m/Y') }}</small></td>
                             <td class="text-center">
                                 <span class="badge bg-secondary">{{ $ac->total_productos }}</span>
