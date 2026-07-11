@@ -89,6 +89,13 @@
                 <span class="vd-badge vd-badge-secondary">
                     {{ $esCredito ? 'Crédito' : 'Contado' }}
                 </span>
+                @if(($venta->venta_es_anticipo ?? 0) == 1)
+                    <span class="vd-badge" style="background:#185FA5;color:#fff;">
+                        <i class="fa-solid fa-hand-holding-dollar me-1"></i>Anticipo
+                    </span>
+                @else
+                    <span class="vd-badge vd-badge-secondary">No es anticipo</span>
+                @endif
             </div>
         @else
             <div class="vd-check-circle bg-danger">
@@ -108,6 +115,13 @@
                 <span class="vd-badge vd-badge-secondary">
                     {{ $esCredito ? 'Crédito' : 'Contado' }}
                 </span>
+                @if(($venta->venta_es_anticipo ?? 0) == 1)
+                    <span class="vd-badge" style="background:#185FA5;color:#fff;">
+                        <i class="fa-solid fa-hand-holding-dollar me-1"></i>Anticipo
+                    </span>
+                @else
+                    <span class="vd-badge vd-badge-secondary">No es anticipo</span>
+                @endif
             </div>
         @endif
     </div>

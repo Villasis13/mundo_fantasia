@@ -90,6 +90,15 @@ class Caja extends Component
     public array $tiposPago    = [];
     public bool  $esGratuita   = false;
 
+    // ── Anticipo (deducir anticipo de Venta de Servicios) ─────
+    public ?int   $anticipoVentaId = null;   // id_venta del anticipo aplicado
+    public float  $anticipoMonto   = 0.0;    // monto del anticipo aplicado
+    public string $anticipoInfo    = '';     // serie-correlativo del anticipo
+    public string $antSerie        = '';
+    public string $antCorrelativo  = '';
+    public string $antCliente      = '';
+    public array  $anticiposResultados = [];
+
     // ── Rectificar comprobante ────────────────────────────────
     public int    $rectVentaId    = 0;
     public int    $rectVendedor   = 0;
@@ -164,7 +173,8 @@ class Caja extends Component
     public function getVueltoProperty(): float
     {
         $pagado = collect($this->pagos)->sum(fn($p) => (float)($p['monto'] ?? 0));
-        return round(max(0, $pagado - $this->totales['total']), 2);
+        $totalACubrir = max(0, $this->totales['total'] - $this->anticipoMonto);
+        return round(max(0, $pagado - $totalACubrir), 2);
     }
 
     public function updatedEsGratuita(): void
@@ -683,6 +693,76 @@ class Caja extends Component
         return 'caja_pedidos.crear';
     }
 
+    // ── Anticipos ─────────────────────────────────────────────
+    public function abrirModalAnticipo(): void
+    {
+        $this->reset(['antSerie', 'antCorrelativo', 'antCliente', 'anticiposResultados']);
+        $this->dispatch('abrirModalAnticipo');
+    }
+
+    public function buscarAnticipos(): void
+    {
+        $q = DB::table('ventas as v')
+            ->leftJoin('clientes as c', 'c.id_clientes', '=', 'v.id_clientes')
+            ->where('v.venta_es_anticipo', 1)
+            ->where('v.id_formas_pago', 1)
+            ->where('v.venta_anticipo_usado', 0)
+            ->when($this->idEmpresa ?? null, fn($x) => $x->where('v.id_empresa', $this->idEmpresa))
+            ->when(trim($this->antSerie) !== '',      fn($x) => $x->where('v.venta_serie', 'like', '%' . trim($this->antSerie) . '%'))
+            ->when(trim($this->antCorrelativo) !== '', fn($x) => $x->where('v.venta_correlativo', 'like', '%' . trim($this->antCorrelativo) . '%'))
+            ->when(trim($this->antCliente) !== '', fn($x) => $x->where(fn($w) =>
+                $w->where('c.cliente_nombre', 'like', '%' . trim($this->antCliente) . '%')
+                  ->orWhere('c.cliente_razonsocial', 'like', '%' . trim($this->antCliente) . '%')
+                  ->orWhere('c.cliente_numero', 'like', '%' . trim($this->antCliente) . '%')))
+            ->orderByDesc('v.id_venta')
+            ->limit(50)
+            ->select(
+                'v.id_venta', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_fecha', 'v.venta_total',
+                'c.cliente_nombre', 'c.cliente_razonsocial', 'c.cliente_numero', 'c.id_tipo_documento'
+            )->get();
+
+        $this->anticiposResultados = $q->map(fn($r) => [
+            'id_venta'    => (int) $r->id_venta,
+            'serie'       => $r->venta_serie,
+            'correlativo' => str_pad($r->venta_correlativo, 8, '0', STR_PAD_LEFT),
+            'fecha'       => \Carbon\Carbon::parse($r->venta_fecha)->format('d/m/Y'),
+            'total'       => (float) $r->venta_total,
+            'cliente'     => $r->id_tipo_documento == 4 ? ($r->cliente_razonsocial ?: $r->cliente_nombre) : ($r->cliente_nombre ?: $r->cliente_razonsocial),
+        ])->toArray();
+    }
+
+    public function aplicarAnticipo(int $idVenta): void
+    {
+        $v = DB::table('ventas')->where('id_venta', $idVenta)
+            ->where('venta_es_anticipo', 1)->where('venta_anticipo_usado', 0)->first();
+        if (!$v) {
+            session()->flash('error', 'El anticipo ya no está disponible.');
+            return;
+        }
+        $this->anticipoVentaId = (int) $v->id_venta;
+        $this->anticipoMonto   = (float) $v->venta_total;
+        $this->anticipoInfo    = $v->venta_serie . '-' . str_pad($v->venta_correlativo, 8, '0', STR_PAD_LEFT);
+
+        // Ajustar la línea de pago al monto que falta cubrir (Total - Anticipo)
+        if ($this->idFormasPago === 1 && !$this->esGratuita) {
+            $totalACubrir = max(0, round($this->totales['total'] - $this->anticipoMonto, 2));
+            $this->pagos  = [['id_tipo_pago' => $this->idEfectivo(), 'monto' => $totalACubrir > 0 ? (string) $totalACubrir : '', 'marca_tarjeta' => '']];
+        }
+
+        $this->dispatch('cerrarModalAnticipo');
+    }
+
+    public function quitarAnticipo(): void
+    {
+        $this->anticipoVentaId = null;
+        $this->anticipoMonto   = 0.0;
+        $this->anticipoInfo    = '';
+        if ($this->idFormasPago === 1 && !$this->esGratuita) {
+            $total       = $this->totales['total'];
+            $this->pagos = [['id_tipo_pago' => $this->idEfectivo(), 'monto' => $total > 0 ? (string) $total : '', 'marca_tarjeta' => '']];
+        }
+    }
+
     public function guardar(): void
     {
         if (!auth()->user()->can($this->permisoCrear())) {
@@ -719,8 +799,9 @@ class Caja extends Component
                 }
             }
             $totalPagado = collect($this->pagos)->sum(fn($p) => (float)($p['monto'] ?? 0));
-            if ($totalPagado < $total) {
-                session()->flash('error', 'El monto recibido (S/ ' . number_format($totalPagado, 2) . ') es menor al total (S/ ' . number_format($total, 2) . ').');
+            $totalACubrir = round($total - $this->anticipoMonto, 2);   // el anticipo reduce lo que falta pagar
+            if (round($totalPagado, 2) < $totalACubrir) {
+                session()->flash('error', 'El monto recibido (S/ ' . number_format($totalPagado, 2) . ') es menor al total a pagar (S/ ' . number_format($totalACubrir, 2) . ') tras aplicar el anticipo.');
                 return;
             }
         }
@@ -785,6 +866,25 @@ class Caja extends Component
 
             Serie::where('id_serie', $informacionSerie->id_serie)
                 ->update(['correlativo' => $informacionSerie->correlativo + 1]);
+
+            // Registrar anticipo aplicado y marcarlo como usado
+            if ($this->anticipoVentaId && $this->anticipoMonto > 0 && $this->idFormasPago === 1 && !$this->esGratuita) {
+                $anticipoValido = DB::table('ventas')->where('id_venta', $this->anticipoVentaId)
+                    ->where('venta_es_anticipo', 1)->where('venta_anticipo_usado', 0)->lockForUpdate()->first();
+                if ($anticipoValido) {
+                    DB::table('venta_anticipos')->insert([
+                        'id_venta'                => $idVenta,
+                        'id_venta_servicio'       => $this->anticipoVentaId,
+                        'venta_anticipo_monto'    => $this->anticipoMonto,
+                        'venta_anticipo_mirotime' => (string) microtime(true),
+                        'venta_anticipo_estado'   => 1,
+                        'created_at'              => now(),
+                        'updated_at'              => now(),
+                    ]);
+                    DB::table('ventas')->where('id_venta', $this->anticipoVentaId)
+                        ->update(['venta_anticipo_usado' => 1, 'updated_at' => now()]);
+                }
+            }
 
             foreach ($this->items as $item) {
                 $idPro    = $item['id_pro'] !== null ? (int) $item['id_pro'] : null;
@@ -1361,6 +1461,9 @@ class Caja extends Component
         $this->esGratuita              = false;
         $this->pedidoClienteNombreOrig = '';
         $this->pedidoClienteDocOrig    = '';
+        $this->anticipoVentaId         = null;
+        $this->anticipoMonto           = 0.0;
+        $this->anticipoInfo            = '';
         $this->resetErrorBag();
     }
 
@@ -1369,9 +1472,11 @@ class Caja extends Component
         if ($this->esGratuita) return;
         $this->idFormasPago = $id;
         if ($id === 1) {
-            $total       = $this->totales['total'];
+            $total       = max(0, $this->totales['total'] - $this->anticipoMonto);
             $this->pagos = [['id_tipo_pago' => $this->idEfectivo(), 'monto' => $total > 0 ? (string) $total : '', 'marca_tarjeta' => '']];
         } else {
+            // El anticipo solo aplica al contado
+            $this->quitarAnticipo();
             $this->pagos = [];
         }
     }

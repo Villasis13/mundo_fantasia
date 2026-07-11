@@ -22,7 +22,7 @@ class GestionProductos extends Component
     public ?int    $idFamilia            = null;
     public ?int    $idCa                 = null;
     public ?int    $idMedida             = null;
-    public ?int    $idTipoAfectacion     = null;
+    public ?int    $idTipoAfectacion     = 2; // Exonerado por defecto (Iquitos-Loreto)
     public string  $proNombre          = '';
     public string  $proCodigo          = '';
     public string  $proCodigoInterno   = '';

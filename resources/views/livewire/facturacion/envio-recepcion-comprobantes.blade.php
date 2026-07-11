@@ -53,6 +53,7 @@
                             <th>Cliente</th>
                             <th class="text-center">XML</th>
                             <th class="text-center">Envío</th>
+                            <th class="text-center">PDF</th>
                             <th class="text-center">Respuesta SUNAT</th>
                             <th>Observación de Respuesta</th>
                             <th class="text-center pe-3">Acciones</th>
@@ -86,6 +87,12 @@
                                     @endif
                                 </td>
                                 <td class="text-center">
+                                    <a href="{{ url('Gestionventas/imprimir_ticket_pdf') }}?venta_id={{ $vta->id_venta }}"
+                                       target="_blank" class="btn btn-sm btn-outline-danger" title="Ver PDF">
+                                        <i class="fa-solid fa-file-pdf"></i>
+                                    </a>
+                                </td>
+                                <td class="text-center">
                                     @if($vta->venta_estado_sunat == 1)
                                         <span class="badge bg-success">Aceptado</span>
                                     @endif
@@ -94,7 +101,7 @@
                                 <td class="text-center pe-3"></td>
                             </tr>
                         @empty
-                            <tr><td colspan="10" class="text-center text-muted py-4">
+                            <tr><td colspan="11" class="text-center text-muted py-4">
                                 <i class="fa fa-filter fa-2x d-block mb-2 opacity-50"></i>
                                 {{ $buscado ? 'No se encontraron comprobantes con los filtros seleccionados.' : 'Aplique un filtro y presione Buscar.' }}
                             </td></tr>

@@ -66,6 +66,7 @@ class VentaServicios extends Component
     public int    $idFormasPago = 1;
     public ?int   $idTipoPago   = null;
     public string $pagoCliente  = '0';
+    public bool   $esAnticipo   = false;   // switch: guardar la venta como anticipo
 
     // ── Cuotas ───────────────────────────────────────────────────
     public int   $numeroCuotas = 0;
@@ -162,7 +163,7 @@ class VentaServicios extends Component
             'descripcion'        => '',
             'cantidad'           => 1,
             'precio'             => '',
-            'id_tipo_afectacion' => 1,
+            'id_tipo_afectacion' => 2, // Exonerado por defecto (Iquitos-Loreto)
         ];
     }
 
@@ -574,6 +575,9 @@ class VentaServicios extends Component
                 $venta->id_formas_pago           = $idFormasPago;
                 $venta->venta_estado_pago        = $idFormasPago !== 2 ? 2 : 0;
                 $venta->venta_codigo             = microtime(true);
+                // Anticipo: solo al contado (id_formas_pago = 1)
+                $venta->venta_es_anticipo        = ($this->esAnticipo && $idFormasPago === 1) ? 1 : 0;
+                $venta->venta_anticipo_usado     = 0;
                 $venta->save();
                 $idVenta = $venta->id_venta;
 
@@ -637,6 +641,7 @@ class VentaServicios extends Component
             $this->cuotas       = [];
             $this->numeroCuotas = 0;
             $this->pagoCliente  = '0';
+            $this->esAnticipo   = false;
 
             $this->dispatch('ventaGuardada', ventaId: $idVentaGenerada);
 

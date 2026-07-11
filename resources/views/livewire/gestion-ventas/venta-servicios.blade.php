@@ -169,14 +169,6 @@
                                 <label class="rv-fl">Correlativo</label>
                                 <div class="rv-input rv-corr">{{ $correlativo }}</div>
                             </div>
-                            <div class="col-6 col-sm-2 col-md-2">
-                                <label class="rv-fl">IGV</label>
-                                <select class="rv-select" wire:model.live="porcentajeIgv">
-                                    <option value="18.0">18%</option>
-                                    <option value="10.5">10.5%</option>
-                                    <option value="0">Sin IGV</option>
-                                </select>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -205,6 +197,17 @@
                                         <i class="fa-solid fa-calendar-days" style="font-size:10px;"></i> Crédito
                                     </label>
                                 </div>
+
+                                @if($idFormasPago == 1)
+                                <div class="form-check form-switch mt-3">
+                                    <input class="form-check-input" type="checkbox" role="switch"
+                                           id="vs-es-anticipo" wire:model="esAnticipo"
+                                           style="cursor:pointer;">
+                                    <label class="form-check-label small fw-semibold" for="vs-es-anticipo" style="cursor:pointer;">
+                                        Registrar como anticipo
+                                    </label>
+                                </div>
+                                @endif
                             </div>
 
                             @if($idFormasPago == 1)

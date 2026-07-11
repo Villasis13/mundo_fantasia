@@ -882,27 +882,34 @@
                     <div class="row g-2 align-items-start">
                         {{-- Contado / Crédito (deshabilitado en modo gratuita) --}}
                         @if(!$esGratuita)
-                        <div class="col-12 col-sm-auto">
-                            <label class="rv-fl" style="font-size:13px;">Forma de pago</label>
-                            <div class="rv-btn-group" style="gap:3px;">
-                                <button type="button" id="btn-contado"
-                                        class="rv-btn {{ $idFormasPago == 1 ? 'rv-bt-green' : '' }}"
-                                        style="padding:7px 14px;font-size:13px;min-width:0;"
-                                        wire:click="cambiarFormaPago(1)"
-                                        wire:loading.attr="disabled"
-                                        wire:target="cambiarFormaPago">
-                                    <i class="fa-solid fa-money-bill" style="font-size:11px;"></i> Contado
-                                </button>
-                                <button type="button" id="btn-credito"
-                                        class="rv-btn {{ $idFormasPago == 2 ? 'rv-bt-amber' : '' }}"
-                                        style="padding:7px 14px;font-size:13px;min-width:0;"
-                                        wire:click="cambiarFormaPago(2)"
-                                        wire:loading.attr="disabled"
-                                        wire:target="cambiarFormaPago">
-                                    <i class="fa-solid fa-calendar-days" style="font-size:11px;"></i> Crédito
-                                </button>
+                            <div class="col-12 col-sm-auto">
+                                <label class="rv-fl" style="font-size:13px;">Forma de pago</label>
+                                <div class="rv-btn-group" style="gap:3px;">
+                                    <button type="button" id="btn-contado"
+                                            class="rv-btn {{ $idFormasPago == 1 ? 'rv-bt-green' : '' }}"
+                                            style="padding:7px 14px;font-size:13px;min-width:0;"
+                                            wire:click="cambiarFormaPago(1)"
+                                            wire:loading.attr="disabled"
+                                            wire:target="cambiarFormaPago">
+                                        <i class="fa-solid fa-money-bill" style="font-size:11px;"></i> Contado
+                                    </button>
+                                    <button type="button" id="btn-credito"
+                                            class="rv-btn {{ $idFormasPago == 2 ? 'rv-bt-amber' : '' }}"
+                                            style="padding:7px 14px;font-size:13px;min-width:0;"
+                                            wire:click="cambiarFormaPago(2)"
+                                            wire:loading.attr="disabled"
+                                            wire:target="cambiarFormaPago">
+                                        <i class="fa-solid fa-calendar-days" style="font-size:11px;"></i> Crédito
+                                    </button>
+                                </div>
+                                @if($idFormasPago == 1)
+                                    <button type="button" class="btn btn-outline-primary btn-sm mt-3"
+                                            style="padding:7px 14px;font-size:13px;"
+                                            wire:click="abrirModalAnticipo">
+                                        <i class="fa-solid fa-hand-holding-dollar me-1"></i> Agregar anticipo
+                                    </button>
+                                @endif
                             </div>
-                        </div>
                         @endif
 
                         @if($esGratuita)
@@ -982,19 +989,36 @@
                                     <i class="fa-solid fa-plus me-1"></i>Agregar medio de pago
                                 </button>
 
+                                {{-- Anticipo aplicado --}}
+                                @if($anticipoVentaId)
+                                <div class="d-flex align-items-center gap-2 mt-3 p-2 rounded" style="background:#E6F1FB;font-size:13px;">
+                                    <i class="fa-solid fa-hand-holding-dollar" style="color:#185FA5;"></i>
+                                    <span>Anticipo aplicado: <strong>{{ $anticipoInfo }}</strong> → <strong>S/ {{ number_format($anticipoMonto, 2) }}</strong></span>
+                                    <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-auto" wire:click="quitarAnticipo" title="Quitar anticipo">
+                                        <i class="fa-solid fa-xmark"></i> Quitar
+                                    </button>
+                                </div>
+                                @endif
+
                                 {{-- Resumen pagado / faltante --}}
                                 @php
                                     $totalPagadoLineas = collect($pagos)->sum(fn($p) => (float)($p['monto'] ?? 0));
                                     $totalVentaLineas  = $this->totales['total'];
-                                    $faltanteLineas    = max(0, $totalVentaLineas - $totalPagadoLineas);
-                                    $vueltoLineas      = max(0, $totalPagadoLineas - $totalVentaLineas);
+                                    $totalACubrir      = max(0, $totalVentaLineas - $anticipoMonto);
+                                    $faltanteLineas    = max(0, $totalACubrir - $totalPagadoLineas);
+                                    $vueltoLineas      = max(0, $totalPagadoLineas - $totalACubrir);
                                 @endphp
-                                @if($totalPagadoLineas > 0)
+                                @if($totalPagadoLineas > 0 || $anticipoVentaId)
                                 <div class="d-flex gap-3 flex-wrap mt-3" style="font-size:14px;">
                                     <span style="color:#6c757d;">
                                         Total: <strong>S/ {{ number_format($totalVentaLineas, 2) }}</strong>
                                     </span>
-                                    <span style="color:{{ $totalPagadoLineas >= $totalVentaLineas ? '#3B6D11' : '#dc3545' }};">
+                                    @if($anticipoVentaId)
+                                    <span style="color:#185FA5;">
+                                        Anticipo: <strong>S/ {{ number_format($anticipoMonto, 2) }}</strong>
+                                    </span>
+                                    @endif
+                                    <span style="color:{{ $totalPagadoLineas >= $totalACubrir ? '#3B6D11' : '#dc3545' }};">
                                         Pagado: <strong>S/ {{ number_format($totalPagadoLineas, 2) }}</strong>
                                     </span>
                                     @if($faltanteLineas > 0)
@@ -1131,7 +1155,7 @@
                         <tfoot>
                             <tr style="background:#f8f9fa;border-top:2px solid #dee2e6;">
                                 <td colspan="4" class="rv-td text-end fw-bold" style="font-size:16px;color:#6c757d;padding:14px 14px;">
-                                    Total a pagar:
+                                    Sub Total:
                                 </td>
                                 <td class="rv-td text-end fw-bold" style="font-size:22px;color:#A32D2D;padding:14px 14px;white-space:nowrap;">
                                     S/ {{ number_format($totalFila, 2) }}
@@ -1159,7 +1183,13 @@
                 <div class="rv-cb">
                     <div class="rv-tr-row"><span style="font-size:16px;">Op. gravada</span><span style="font-size:16px;">S/ {{ number_format($this->totales['gravada'], 2) }}</span></div>
                     <div class="rv-tr-row"><span style="font-size:16px;">IGV {{ $porcentajeIgv }}%</span><span style="font-size:16px;">S/ {{ number_format($this->totales['igv'], 2) }}</span></div>
-                    <div class="rv-tr-row"><span style="font-size:16px;">Exonerada</span><span style="font-size:16px;">S/ {{ number_format($this->totales['exonerada'], 2) }}</span></div>
+                    @if($anticipoVentaId)
+                        <div class="rv-tr-row" style="color:#185FA5;">
+                            <span style="font-size:16px;">Anticipos</span>
+                            <span style="font-size:16px;font-weight:700;">- S/ {{ number_format($anticipoMonto, 2) }}</span>
+                        </div>
+                    @endif
+                    <div class="rv-tr-row"><span style="font-size:16px;">Exonerada</span><span style="font-size:16px;">S/ {{ number_format(max(0, $this->totales['exonerada'] - $anticipoMonto), 2) }}</span></div>
                     <div class="rv-tr-row"><span style="font-size:16px;">Inafectada</span><span style="font-size:16px;">S/ {{ number_format($this->totales['inafecta'], 2) }}</span></div>
                     <div class="rv-tr-row"><span style="font-size:16px;">Gratuitas</span><span style="font-size:16px;">S/ {{ number_format($this->totales['gratuita'], 2) }}</span></div>
                     <div class="rv-tr-row"><span style="font-size:16px;">ICBPER</span><span style="font-size:16px;">S/ {{ number_format($this->totales['impuesto'], 2) }}</span></div>
@@ -1186,7 +1216,7 @@
                             Total
                         </span>
                         <span style="font-size:30px;{{ $esGratuita ? 'color:#664d03;' : '' }}">
-                            S/ {{ number_format($this->totales['total'], 2) }}
+                            S/ {{ number_format(max(0, $this->totales['total'] - $anticipoMonto), 2) }}
                         </span>
                     </div>
                     <button class="rv-cobrar-btn" type="button" id="btn-registrar-venta"
@@ -1470,6 +1500,84 @@
         </div>
     </div>
 
+    {{-- ══════ MODAL: DEDUCIR ANTICIPO ══════ --}}
+    <div class="modal fade" id="modalAnticipo" wire:ignore.self tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-hand-holding-dollar text-primary me-2"></i>Deducir Anticipo</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold mb-1">Serie</label>
+                            <input type="text" class="form-control form-control-sm" wire:model="antSerie" wire:keydown.enter="buscarAnticipos">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold mb-1">Correlativo</label>
+                            <input type="text" class="form-control form-control-sm" wire:model="antCorrelativo" wire:keydown.enter="buscarAnticipos">
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small fw-semibold mb-1">Cliente</label>
+                            <input type="text" class="form-control form-control-sm" wire:model="antCliente" wire:keydown.enter="buscarAnticipos" placeholder="Nombre o documento">
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <button type="button" class="btn btn-primary btn-sm w-100" wire:click="buscarAnticipos"
+                                    wire:loading.attr="disabled" wire:target="buscarAnticipos">
+                                <span wire:loading.remove wire:target="buscarAnticipos"><i class="fa-solid fa-magnifying-glass me-1"></i>Buscar</span>
+                                <span wire:loading wire:target="buscarAnticipos"><span class="spinner-border spinner-border-sm"></span></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Serie</th>
+                                    <th>Correlativo</th>
+                                    <th>Fecha</th>
+                                    <th class="text-end">Importe Total</th>
+                                    <th class="text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($anticiposResultados as $a)
+                                    <tr wire:key="ant-{{ $a['id_venta'] }}">
+                                        <td class="fw-semibold text-primary">{{ $a['serie'] }}</td>
+                                        <td>{{ $a['correlativo'] }}</td>
+                                        <td>{{ $a['fecha'] }}</td>
+                                        <td class="text-end fw-bold">S/ {{ number_format($a['total'], 2) }}</td>
+                                        <td class="text-center">
+                                            <div class="d-flex gap-1 justify-content-center">
+                                                <button type="button" class="btn btn-sm btn-success" wire:click="aplicarAnticipo({{ $a['id_venta'] }})">
+                                                    <i class="fa-solid fa-check me-1"></i>Aplicar
+                                                </button>
+                                                <a href="{{ url('Gestionventas/venta_detalle') }}?venta_id={{ $a['id_venta'] }}"
+                                                   target="_blank" class="btn btn-sm btn-outline-info" title="Ver información">
+                                                    <i class="fa-solid fa-eye"></i>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="5" class="text-center text-muted py-4">
+                                        <i class="fa fa-magnifying-glass fa-2x d-block mb-2 opacity-50"></i>
+                                        Busque anticipos por serie, correlativo o cliente.
+                                    </td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>
 
 @script
@@ -1552,6 +1660,14 @@
         const m = document.getElementById('modalConfirmCierre');
         if (m) bootstrap.Modal.getOrCreateInstance(m).hide();
         // El listener hidden.bs.modal se encarga de reabrir el modal principal
+    });
+
+    $wire.on('abrirModalAnticipo', () => {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAnticipo')).show();
+    });
+    $wire.on('cerrarModalAnticipo', () => {
+        const m = bootstrap.Modal.getInstance(document.getElementById('modalAnticipo'));
+        if (m) m.hide();
     });
 
     $wire.on('abrirModalAnularVenta', () => {

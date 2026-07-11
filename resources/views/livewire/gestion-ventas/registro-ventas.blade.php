@@ -140,6 +140,7 @@
                             <th class="text-center">Condición</th>
                             <th>Tipo de pago</th>
                             <th class="text-center">Estado</th>
+                            <th class="text-center">PDF</th>
                             <th class="text-end">Total</th>
                             <th class="text-center pe-3">Acciones</th>
                         </tr>
@@ -183,6 +184,12 @@
                                         Pendiente
                                     @endif
                                 </td>
+                                <td class="text-center">
+                                    <a href="{{ url('Gestionventas/imprimir_ticket_pdf') }}?venta_id={{ $vta->id_venta }}"
+                                       target="_blank" class="btn btn-sm btn-outline-danger" title="Ver PDF">
+                                        <i class="fa-solid fa-file-pdf"></i>
+                                    </a>
+                                </td>
                                 <td class="text-end fw-bold text-primary">S/ {{ number_format($vta->venta_total, 2) }}</td>
                                 <td class="text-center pe-3">
                                     <div class="d-flex gap-1 justify-content-center">
@@ -224,7 +231,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="8" class="text-center text-muted py-4">
+                            <tr><td colspan="9" class="text-center text-muted py-4">
                                 <i class="fa fa-filter fa-2x d-block mb-2 opacity-50"></i>
                                 @if($filtrado)
                                     No se encontraron ventas con los filtros seleccionados.

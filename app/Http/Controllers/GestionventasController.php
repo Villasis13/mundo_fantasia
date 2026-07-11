@@ -657,7 +657,8 @@ class GestionventasController extends Controller
                 $documento = "$dato_venta->cliente_numero";
             }
             $da = new NumeroALetras();
-            $importe_letra = $da->toInvoice($dato_venta->venta_total,'2','soles');
+            $anticipoLetras = (float) DB::table('venta_anticipos')->where('id_venta', $dato_venta->id_venta)->sum('venta_anticipo_monto');
+            $importe_letra = $da->toInvoice(max(0, (float)$dato_venta->venta_total - $anticipoLetras), '2', 'soles');
 
 
             $pdf = new PDFBufeo('P');
@@ -787,12 +788,34 @@ class GestionventasController extends Controller
             $pdf->Cell(25,  10, 'P.U.',                      1, 0, 'C', 1);
             $pdf->Cell(20,  10, 'VALOR VENTA',               1, 1, 'C', 1);
             $pdf->SetWidths([10, 18, 107, 25, 20]);
+            $esAnticipo = (int)($dato_venta->venta_es_anticipo ?? 0) === 1;
+            $pdf->SetAligns(['C', 'C', 'L', 'R', 'R']); // Detalle a la izquierda
+
+            // Anticipos aplicados a esta venta -> se muestran como primera(s) fila(s)
+            $anticiposAplicados = DB::table('venta_anticipos as va')
+                ->join('ventas as vs', 'vs.id_venta', '=', 'va.id_venta_servicio')
+                ->where('va.id_venta', $dato_venta->id_venta)
+                ->select('va.venta_anticipo_monto', 'vs.venta_serie', 'vs.venta_correlativo')
+                ->get();
+            $anticipoTotal = (float) $anticiposAplicados->sum('venta_anticipo_monto');
+            foreach ($anticiposAplicados as $ant) {
+                $pdf->SetFont('Helvetica', '', 7);
+                $pdf->Row([
+                    '1',
+                    'UNIDAD',
+                    utf8_decode('ANTICIPO: FACTURA NRO. ' . $ant->venta_serie . ' - ' . str_pad($ant->venta_correlativo, 8, '0', STR_PAD_LEFT)),
+                    number_format((float) $ant->venta_anticipo_monto, 2, '.', ','),
+                    '-' . number_format((float) $ant->venta_anticipo_monto, 2, '.', ','),
+                ]);
+            }
+
             foreach ($detalle_venta as $f) {
                 $pdf->SetFont('Helvetica', '', 7);
+                $descripcion = $f->venta_detalle_nombre_producto . ($esAnticipo ? ' ***Pago Anticipo***' : '');
                 $pdf->Row([
                     number_format((float)$f->venta_detalle_cantidad, 0, '.', ','),
                     'UNIDAD',
-                    utf8_decode($f->venta_detalle_nombre_producto),
+                    utf8_decode($descripcion),
                     number_format(round((float)$f->venta_detalle_precio_unitario, 2), 2, '.', ','),
                     number_format(round((float)$f->venta_detalle_importe_total,  2), 2, '.', ','),
                 ]);
@@ -817,13 +840,17 @@ class GestionventasController extends Controller
                 $col_desc = 50; $col_sep = 10; $col_val = 20;
                 $pdf->SetFont('Helvetica', '', 8);
                 $pdf->SetY($qr_y_pos); $pdf->SetX(110);
-                foreach ([
-                    [utf8_decode('Op. Gravada'),   number_format((float)$dato_venta->venta_totalgravada,   2, '.', ',')],
-                    [utf8_decode('Op. Inafecta'),  number_format((float)$dato_venta->venta_totalinafecta,  2, '.', ',')],
-                    [utf8_decode('Op. Exonerada'), number_format((float)$dato_venta->venta_totalexonerada, 2, '.', ',')],
-                    [utf8_decode('Op. Gratuita'),  number_format((float)$dato_venta->venta_totalgratuita,  2, '.', ',')],
-                    ['IGV',                         number_format((float)$dato_venta->venta_totaligv,       2, '.', ',')],
-                ] as $item) {
+                $filasTotales = [];
+                if ($anticipoTotal > 0) {
+                    $filasTotales[] = [utf8_decode('Sub Total Ventas'), number_format((float)$dato_venta->venta_total, 2, '.', ',')];
+                    $filasTotales[] = [utf8_decode('Anticipo'),         number_format($anticipoTotal, 2, '.', ',')];
+                }
+                $filasTotales[] = [utf8_decode('Op. Gravada'),   number_format((float)$dato_venta->venta_totalgravada,   2, '.', ',')];
+                $filasTotales[] = [utf8_decode('Op. Inafecta'),  number_format((float)$dato_venta->venta_totalinafecta,  2, '.', ',')];
+                $filasTotales[] = [utf8_decode('Op. Exonerada'), number_format(max(0, (float)$dato_venta->venta_totalexonerada - $anticipoTotal), 2, '.', ',')];
+                $filasTotales[] = [utf8_decode('Op. Gratuita'),  number_format((float)$dato_venta->venta_totalgratuita,  2, '.', ',')];
+                $filasTotales[] = ['IGV',                         number_format((float)$dato_venta->venta_totaligv,       2, '.', ',')];
+                foreach ($filasTotales as $item) {
                     $pdf->SetX(110);
                     $pdf->Cell($col_desc, 5, $item[0],             'LTR', 0, 'L');
                     $pdf->Cell($col_sep,  5, $dato_venta->simbolo, 'TR',  0, 'C');
@@ -835,7 +862,7 @@ class GestionventasController extends Controller
                 $pdf->SetFont('Helvetica', 'B', 9);
                 $pdf->Cell($col_desc, 5, 'IMPORTE TOTAL',          'LBR', 0, 'L');
                 $pdf->Cell($col_sep,  5, $dato_venta->simbolo,      'BR',  0, 'C');
-                $pdf->Cell($col_val,  5, number_format((float)$dato_venta->venta_total, 2, '.', ','), 'LBR', 1, 'R');
+                $pdf->Cell($col_val,  5, number_format(max(0, (float)$dato_venta->venta_total - $anticipoTotal), 2, '.', ','), 'LBR', 1, 'R');
                 $pdf->SetY($qr_y_pos + 42); $pdf->SetX(10);
                 $pdf->SetFont('Helvetica', '', 8);
                 if (!empty($dato_venta->venta_codigo_hash)) {
@@ -911,7 +938,8 @@ class GestionventasController extends Controller
                 $documento = "$dato_venta->cliente_numero";
             }
             $da = new NumeroALetras();
-            $importe_letra = $da->toInvoice($dato_venta->venta_total,'2','soles');
+            $anticipoLetras = (float) DB::table('venta_anticipos')->where('id_venta', $dato_venta->id_venta)->sum('venta_anticipo_monto');
+            $importe_letra = $da->toInvoice(max(0, (float)$dato_venta->venta_total - $anticipoLetras), '2', 'soles');
 
             $pdf = new PDFBufeo('P');
             $pdf->AddPage();
@@ -1040,12 +1068,34 @@ class GestionventasController extends Controller
             $pdf->Cell(25,  10, 'P.U.',                      1, 0, 'C', 1);
             $pdf->Cell(20,  10, 'VALOR VENTA',               1, 1, 'C', 1);
             $pdf->SetWidths([10, 18, 107, 25, 20]);
+            $esAnticipo = (int)($dato_venta->venta_es_anticipo ?? 0) === 1;
+            $pdf->SetAligns(['C', 'C', 'L', 'R', 'R']); // Detalle a la izquierda
+
+            // Anticipos aplicados a esta venta -> se muestran como primera(s) fila(s)
+            $anticiposAplicados = DB::table('venta_anticipos as va')
+                ->join('ventas as vs', 'vs.id_venta', '=', 'va.id_venta_servicio')
+                ->where('va.id_venta', $dato_venta->id_venta)
+                ->select('va.venta_anticipo_monto', 'vs.venta_serie', 'vs.venta_correlativo')
+                ->get();
+            $anticipoTotal = (float) $anticiposAplicados->sum('venta_anticipo_monto');
+            foreach ($anticiposAplicados as $ant) {
+                $pdf->SetFont('Helvetica', '', 7);
+                $pdf->Row([
+                    '1',
+                    'UNIDAD',
+                    utf8_decode('ANTICIPO: FACTURA NRO. ' . $ant->venta_serie . ' - ' . str_pad($ant->venta_correlativo, 8, '0', STR_PAD_LEFT)),
+                    number_format((float) $ant->venta_anticipo_monto, 2, '.', ','),
+                    '-' . number_format((float) $ant->venta_anticipo_monto, 2, '.', ','),
+                ]);
+            }
+
             foreach ($detalle_venta as $f) {
                 $pdf->SetFont('Helvetica', '', 7);
+                $descripcion = $f->venta_detalle_nombre_producto . ($esAnticipo ? ' ***Pago Anticipo***' : '');
                 $pdf->Row([
                     number_format((float)$f->venta_detalle_cantidad, 0, '.', ','),
                     'UNIDAD',
-                    utf8_decode($f->venta_detalle_nombre_producto),
+                    utf8_decode($descripcion),
                     number_format(round((float)$f->venta_detalle_precio_unitario, 2), 2, '.', ','),
                     number_format(round((float)$f->venta_detalle_importe_total,  2), 2, '.', ','),
                 ]);
@@ -1070,13 +1120,17 @@ class GestionventasController extends Controller
                 $col_desc = 50; $col_sep = 10; $col_val = 20;
                 $pdf->SetFont('Helvetica', '', 8);
                 $pdf->SetY($qr_y_pos); $pdf->SetX(110);
-                foreach ([
-                    [utf8_decode('Op. Gravada'),   number_format((float)$dato_venta->venta_totalgravada,   2, '.', ',')],
-                    [utf8_decode('Op. Inafecta'),  number_format((float)$dato_venta->venta_totalinafecta,  2, '.', ',')],
-                    [utf8_decode('Op. Exonerada'), number_format((float)$dato_venta->venta_totalexonerada, 2, '.', ',')],
-                    [utf8_decode('Op. Gratuita'),  number_format((float)$dato_venta->venta_totalgratuita,  2, '.', ',')],
-                    ['IGV',                         number_format((float)$dato_venta->venta_totaligv,       2, '.', ',')],
-                ] as $item) {
+                $filasTotales = [];
+                if ($anticipoTotal > 0) {
+                    $filasTotales[] = [utf8_decode('Sub Total Ventas'), number_format((float)$dato_venta->venta_total, 2, '.', ',')];
+                    $filasTotales[] = [utf8_decode('Anticipo'),         number_format($anticipoTotal, 2, '.', ',')];
+                }
+                $filasTotales[] = [utf8_decode('Op. Gravada'),   number_format((float)$dato_venta->venta_totalgravada,   2, '.', ',')];
+                $filasTotales[] = [utf8_decode('Op. Inafecta'),  number_format((float)$dato_venta->venta_totalinafecta,  2, '.', ',')];
+                $filasTotales[] = [utf8_decode('Op. Exonerada'), number_format(max(0, (float)$dato_venta->venta_totalexonerada - $anticipoTotal), 2, '.', ',')];
+                $filasTotales[] = [utf8_decode('Op. Gratuita'),  number_format((float)$dato_venta->venta_totalgratuita,  2, '.', ',')];
+                $filasTotales[] = ['IGV',                         number_format((float)$dato_venta->venta_totaligv,       2, '.', ',')];
+                foreach ($filasTotales as $item) {
                     $pdf->SetX(110);
                     $pdf->Cell($col_desc, 5, $item[0],             'LTR', 0, 'L');
                     $pdf->Cell($col_sep,  5, $dato_venta->simbolo, 'TR',  0, 'C');
@@ -1088,7 +1142,7 @@ class GestionventasController extends Controller
                 $pdf->SetFont('Helvetica', 'B', 9);
                 $pdf->Cell($col_desc, 5, 'IMPORTE TOTAL',          'LBR', 0, 'L');
                 $pdf->Cell($col_sep,  5, $dato_venta->simbolo,      'BR',  0, 'C');
-                $pdf->Cell($col_val,  5, number_format((float)$dato_venta->venta_total, 2, '.', ','), 'LBR', 1, 'R');
+                $pdf->Cell($col_val,  5, number_format(max(0, (float)$dato_venta->venta_total - $anticipoTotal), 2, '.', ','), 'LBR', 1, 'R');
                 $pdf->SetY($qr_y_pos + 42); $pdf->SetX(10);
                 $pdf->SetFont('Helvetica', '', 8);
                 if (!empty($dato_venta->venta_codigo_hash)) {

@@ -219,6 +219,11 @@ class PDFBufeo extends Fpdf
         //Set the array of column widths
         $this->widths=$w;
     }
+    function SetAligns($a)
+    {
+        //Set the array of column alignments
+        $this->aligns=$a;
+    }
     function CheckPageBreak($h)
     {
         //If the height h would cause an overflow, add a new page immediately
