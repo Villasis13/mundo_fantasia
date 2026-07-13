@@ -75,7 +75,10 @@ class VentaDetalle extends Component
     public function render()
     {
         $venta        = $this->ventas->listar_venta_x_id($this->ventaId);
-        $detalleVenta = $this->ventas->listar_venta_detalle_x_id_venta($this->ventaId);
+        // Consulta directa: incluye productos (id_pro) y servicios (id_pro NULL)
+        $detalleVenta = DB::table('ventas_detalle')
+            ->where('id_venta', $this->ventaId)
+            ->get();
         $empresa      = $this->empresaModel->listar_datos_empresa();
         $datos        = '';
 

@@ -849,7 +849,7 @@ class Caja extends Component
             $venta->venta_icbper             = $calc['impuesto'];
             $venta->venta_total              = $calc['total'];
             $venta->venta_pago_cliente       = $pagoClient;
-            $venta->venta_vuelto             = ($this->esGratuita || $this->idFormasPago !== 1) ? 0 : max(0, $pagoClient - $calc['total']);
+            $venta->venta_vuelto             = ($this->esGratuita || $this->idFormasPago !== 1) ? 0 : max(0, $pagoClient - max(0, $calc['total'] - $this->anticipoMonto));
             $venta->venta_fecha              = now()->format('Y-m-d H:i:s');
             $venta->tipo_documento_modificar = '';
             $venta->serie_modificar          = null;

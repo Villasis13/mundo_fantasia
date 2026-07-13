@@ -167,17 +167,6 @@
                     </div>
                     <div class="col-sm-4">
                         <div class="vd-field">
-                            <span class="vd-label">IGV</span>
-                            <span class="vd-value">
-                                @if($venta->venta_porcentaje_igv)
-                                    {{ $venta->venta_porcentaje_igv == 18.0 ? '18 %' : '10.5 %' }}
-                                @else —
-                                @endif
-                            </span>
-                        </div>
-                    </div>
-                    <div class="col-sm-4">
-                        <div class="vd-field">
                             <span class="vd-label">Forma de pago</span>
                             <span class="vd-value">{{ $esCredito ? 'Crédito' : 'Contado' }}</span>
                         </div>
@@ -329,10 +318,6 @@
                 <div class="vd-sum-row">
                     <span>Op. Gravada</span>
                     <span>{{ $monedaSimbolo }} {{ number_format($venta->venta_totalgravada, 2) }}</span>
-                </div>
-                <div class="vd-sum-row">
-                    <span>IGV ({{ $venta->venta_porcentaje_igv }}%)</span>
-                    <span>{{ $monedaSimbolo }} {{ number_format($venta->venta_totaligv, 2) }}</span>
                 </div>
                 @endif
 
