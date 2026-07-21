@@ -367,8 +367,10 @@ class AjusteStock extends Component
 
         $items = DB::table('inventario_detalle as d')
             ->join('productos as p', 'p.id_pro', '=', 'd.id_pro')
+            ->leftJoin('categorias as c', 'c.id_ca', '=', 'p.id_ca')
+            ->leftJoin('familias as f', 'f.id_fa', '=', 'c.id_fa')
             ->where('d.id_inventario', $idInventario)
-            ->select('d.*', 'p.pro_nombre', 'p.pro_codigo')
+            ->select('d.*', 'p.pro_nombre', 'p.pro_codigo', 'f.fa_nombre')
             ->orderBy('p.pro_nombre')
             ->get();
 
@@ -377,7 +379,7 @@ class AjusteStock extends Component
         $sheet->setTitle('Inventario');
 
         // ── Estilo base: fondo blanco, negrita, texto negro ──────────
-        $sheet->getStyle('A1:P2')->applyFromArray([
+        $sheet->getStyle('A1:Q2')->applyFromArray([
             'font'      => ['bold' => true, 'color' => ['rgb' => '000000']],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFFFFF']],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER,
@@ -388,36 +390,38 @@ class AjusteStock extends Component
         // ── Fusionar primero ──────────────────────────────────────
         $sheet->mergeCells('A1:A2');  // CODIGO
         $sheet->mergeCells('B1:B2');  // PRODUCTO
-        $sheet->mergeCells('C1:E1');  // SISTEMA
-        $sheet->mergeCells('F1:H1');  // FISICO
-        $sheet->mergeCells('I1:I2');  // S/F
-        $sheet->mergeCells('J1:L1');  // FALTANTE
-        $sheet->mergeCells('M1:O1');  // SOBRANTE
-        $sheet->mergeCells('P1:P2');  // OBSERVACION
+        $sheet->mergeCells('C1:C2');  // FAMILIA
+        $sheet->mergeCells('D1:F1');  // SISTEMA
+        $sheet->mergeCells('G1:I1');  // FISICO
+        $sheet->mergeCells('J1:J2');  // S/F
+        $sheet->mergeCells('K1:M1');  // FALTANTE
+        $sheet->mergeCells('N1:P1');  // SOBRANTE
+        $sheet->mergeCells('Q1:Q2');  // OBSERVACION
 
         // ── Valores fila 1 (grupos) ───────────────────────────────
         $sheet->setCellValue('A1', 'CODIGO');
         $sheet->setCellValue('B1', 'PRODUCTO');
-        $sheet->setCellValue('C1', 'SISTEMA');
-        $sheet->setCellValue('F1', 'FISICO');
-        $sheet->setCellValue('I1', 'S/F');
-        $sheet->setCellValue('J1', 'FALTANTE');
-        $sheet->setCellValue('M1', 'SOBRANTE');
-        $sheet->setCellValue('P1', 'OBSERVACION');
+        $sheet->setCellValue('C1', 'FAMILIA');
+        $sheet->setCellValue('D1', 'SISTEMA');
+        $sheet->setCellValue('G1', 'FISICO');
+        $sheet->setCellValue('J1', 'S/F');
+        $sheet->setCellValue('K1', 'FALTANTE');
+        $sheet->setCellValue('N1', 'SOBRANTE');
+        $sheet->setCellValue('Q1', 'OBSERVACION');
 
         // ── Valores fila 2 (sub-cabeceras) ────────────────────────
-        $sheet->setCellValue('C2', 'STOCK');
-        $sheet->setCellValue('D2', 'COSTO');
-        $sheet->setCellValue('E2', 'TOTAL SISTEMA');
-        $sheet->setCellValue('F2', 'FISICO');
-        $sheet->setCellValue('G2', 'COSTO');
-        $sheet->setCellValue('H2', 'TOTAL FISICO');
-        $sheet->setCellValue('J2', 'FALTANTE');
-        $sheet->setCellValue('K2', 'COSTO');
-        $sheet->setCellValue('L2', 'TOTAL FALTANTE');
-        $sheet->setCellValue('M2', 'SOBRANTE');
-        $sheet->setCellValue('N2', 'COSTO');
-        $sheet->setCellValue('O2', 'TOTAL SOBRANTE');
+        $sheet->setCellValue('D2', 'STOCK');
+        $sheet->setCellValue('E2', 'COSTO');
+        $sheet->setCellValue('F2', 'TOTAL SISTEMA');
+        $sheet->setCellValue('G2', 'FISICO');
+        $sheet->setCellValue('H2', 'COSTO');
+        $sheet->setCellValue('I2', 'TOTAL FISICO');
+        $sheet->setCellValue('K2', 'FALTANTE');
+        $sheet->setCellValue('L2', 'COSTO');
+        $sheet->setCellValue('M2', 'TOTAL FALTANTE');
+        $sheet->setCellValue('N2', 'SOBRANTE');
+        $sheet->setCellValue('O2', 'COSTO');
+        $sheet->setCellValue('P2', 'TOTAL SOBRANTE');
 
         // ── Colores de texto por grupo ────────────────────────────
         $purple = ['font' => ['bold' => true, 'color' => ['rgb' => '7B2D8B']]]; // SISTEMA
@@ -425,10 +429,10 @@ class AjusteStock extends Component
         $orange = ['font' => ['bold' => true, 'color' => ['rgb' => 'C2410C']]]; // FALTANTE
         $red    = ['font' => ['bold' => true, 'color' => ['rgb' => 'DC2626']]]; // SOBRANTE
 
-        foreach (['C1', 'C2', 'D2', 'E2'] as $c) $sheet->getStyle($c)->applyFromArray($purple);
-        foreach (['F1', 'F2', 'G2', 'H2'] as $c) $sheet->getStyle($c)->applyFromArray($cyan);
-        foreach (['J1', 'J2', 'K2', 'L2'] as $c) $sheet->getStyle($c)->applyFromArray($orange);
-        foreach (['M1', 'M2', 'N2', 'O2'] as $c) $sheet->getStyle($c)->applyFromArray($red);
+        foreach (['D1', 'D2', 'E2', 'F2'] as $c) $sheet->getStyle($c)->applyFromArray($purple);
+        foreach (['G1', 'G2', 'H2', 'I2'] as $c) $sheet->getStyle($c)->applyFromArray($cyan);
+        foreach (['K1', 'K2', 'L2', 'M2'] as $c) $sheet->getStyle($c)->applyFromArray($orange);
+        foreach (['N1', 'N2', 'O2', 'P2'] as $c) $sheet->getStyle($c)->applyFromArray($red);
 
         // ── Filas de datos (desde fila 3) ────────────────────────
         // A=CODIGO, B=PRODUCTO, C=STOCK, D=COSTO, E=TOTAL SISTEMA,
@@ -462,20 +466,21 @@ class AjusteStock extends Component
             $data = [
                 'A' => $item->pro_codigo,
                 'B' => $item->pro_nombre,
-                'C' => $stock,
-                'D' => $costo,
-                'E' => round($stock    * $costo, 2),
-                'F' => $fisico,
-                'G' => $costo,
-                'H' => round($fisico   * $costo, 2),
-                'I' => $dif,
-                'J' => $faltante,
-                'K' => $costo,
-                'L' => round($faltante * $costo, 2),
-                'M' => $sobrante,
-                'N' => $costo,
-                'O' => round($sobrante * $costo, 2),
-                'P' => '',
+                'C' => $item->fa_nombre ?? '',
+                'D' => $stock,
+                'E' => $costo,
+                'F' => round($stock    * $costo, 2),
+                'G' => $fisico,
+                'H' => $costo,
+                'I' => round($fisico   * $costo, 2),
+                'J' => $dif,
+                'K' => $faltante,
+                'L' => $costo,
+                'M' => round($faltante * $costo, 2),
+                'N' => $sobrante,
+                'O' => $costo,
+                'P' => round($sobrante * $costo, 2),
+                'Q' => '',
             ];
 
             foreach ($data as $col => $value) {
@@ -491,7 +496,7 @@ class AjusteStock extends Component
             }
 
             if ($bg) {
-                $sheet->getStyle('A' . $row . ':P' . $row)->applyFromArray([
+                $sheet->getStyle('A' . $row . ':Q' . $row)->applyFromArray([
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $bg]],
                 ]);
             }
@@ -501,10 +506,11 @@ class AjusteStock extends Component
 
         $sheet->getColumnDimension('A')->setWidth(15);
         $sheet->getColumnDimension('B')->setWidth(38);
-        foreach (['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'] as $col) {
+        $sheet->getColumnDimension('C')->setWidth(22); // FAMILIA
+        foreach (['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'] as $col) {
             $sheet->getColumnDimension($col)->setWidth(16);
         }
-        $sheet->getColumnDimension('P')->setWidth(22);
+        $sheet->getColumnDimension('Q')->setWidth(22);
 
         $numero   = preg_replace('/[^A-Za-z0-9\-]/', '_', $inv->inventario_numero ?? 'inv');
         $filename = "inventario_{$numero}_" . now()->format('Ymd_His') . '.xlsx';
@@ -515,6 +521,129 @@ class AjusteStock extends Component
         return response()->download($tmpPath, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ])->deleteFileAfterSend(true);
+    }
+
+    // ── Exportar Excel CONSOLIDADO (todos los inventarios del rango) ──
+    public function exportarExcelConsolidado(): mixed
+    {
+        if (!auth()->user()->can('ajuste_stock.exportar')) {
+            return null;
+        }
+
+        $idsInventario = DB::table('inventario')
+            ->when($this->filtroDesde, fn($q) => $q->whereDate('inventario_fecha', '>=', $this->filtroDesde))
+            ->when($this->filtroHasta, fn($q) => $q->whereDate('inventario_fecha', '<=', $this->filtroHasta))
+            ->pluck('id_inventario');
+
+        if ($idsInventario->isEmpty()) {
+            session()->flash('error', 'No hay inventarios en el período seleccionado.');
+            return null;
+        }
+
+        $items = DB::table('inventario_detalle as d')
+            ->join('productos as p', 'p.id_pro', '=', 'd.id_pro')
+            ->leftJoin('categorias as c', 'c.id_ca', '=', 'p.id_ca')
+            ->leftJoin('familias as f', 'f.id_fa', '=', 'c.id_fa')
+            ->join('inventario as i', 'i.id_inventario', '=', 'd.id_inventario')
+            ->whereIn('d.id_inventario', $idsInventario)
+            ->select('d.*', 'p.pro_nombre', 'p.pro_codigo', 'p.id_pro', 'f.fa_nombre',
+                     'i.inventario_numero', 'i.inventario_fecha')
+            ->orderBy('i.inventario_fecha')
+            ->orderBy('p.pro_nombre')
+            ->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Inventario consolidado');
+        $this->cabeceraInventarioExcel($sheet);
+
+        $row = 3;
+        foreach ($items as $item) {
+            $costo = (float) (DB::table('almacen_producto')
+                ->where('id_pro', $item->id_pro)
+                ->orderBy('id_ap', 'asc')
+                ->value('ap_precio_costo') ?? 0);
+            $this->escribirFilaInventarioExcel($sheet, $row, $item, $costo);
+            $row++;
+        }
+
+        $this->anchosInventarioExcel($sheet);
+
+        $filename = 'inventario_consolidado_' . now()->format('Ymd_His') . '.xlsx';
+        $tmpPath  = sys_get_temp_dir() . DIRECTORY_SEPARATOR . $filename;
+        (new Xlsx($spreadsheet))->save($tmpPath);
+
+        return response()->download($tmpPath, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    // ── Helpers compartidos del Excel de inventario (con FAMILIA en C) ──
+    private function cabeceraInventarioExcel($sheet): void
+    {
+        $sheet->getStyle('A1:Q2')->applyFromArray([
+            'font'      => ['bold' => true, 'color' => ['rgb' => '000000']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'FFFFFF']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER,
+                            'vertical'   => Alignment::VERTICAL_CENTER, 'wrapText' => true],
+        ]);
+        $sheet->mergeCells('A1:A2'); $sheet->mergeCells('B1:B2'); $sheet->mergeCells('C1:C2');
+        $sheet->mergeCells('D1:F1'); $sheet->mergeCells('G1:I1'); $sheet->mergeCells('J1:J2');
+        $sheet->mergeCells('K1:M1'); $sheet->mergeCells('N1:P1'); $sheet->mergeCells('Q1:Q2');
+        $sheet->setCellValue('A1', 'CODIGO');   $sheet->setCellValue('B1', 'PRODUCTO'); $sheet->setCellValue('C1', 'FAMILIA');
+        $sheet->setCellValue('D1', 'SISTEMA');  $sheet->setCellValue('G1', 'FISICO');   $sheet->setCellValue('J1', 'S/F');
+        $sheet->setCellValue('K1', 'FALTANTE'); $sheet->setCellValue('N1', 'SOBRANTE'); $sheet->setCellValue('Q1', 'OBSERVACION');
+        $sheet->setCellValue('D2', 'STOCK'); $sheet->setCellValue('E2', 'COSTO'); $sheet->setCellValue('F2', 'TOTAL SISTEMA');
+        $sheet->setCellValue('G2', 'FISICO'); $sheet->setCellValue('H2', 'COSTO'); $sheet->setCellValue('I2', 'TOTAL FISICO');
+        $sheet->setCellValue('K2', 'FALTANTE'); $sheet->setCellValue('L2', 'COSTO'); $sheet->setCellValue('M2', 'TOTAL FALTANTE');
+        $sheet->setCellValue('N2', 'SOBRANTE'); $sheet->setCellValue('O2', 'COSTO'); $sheet->setCellValue('P2', 'TOTAL SOBRANTE');
+        $purple = ['font' => ['bold' => true, 'color' => ['rgb' => '7B2D8B']]];
+        $cyan   = ['font' => ['bold' => true, 'color' => ['rgb' => '0E7490']]];
+        $orange = ['font' => ['bold' => true, 'color' => ['rgb' => 'C2410C']]];
+        $red    = ['font' => ['bold' => true, 'color' => ['rgb' => 'DC2626']]];
+        foreach (['D1', 'D2', 'E2', 'F2'] as $c) $sheet->getStyle($c)->applyFromArray($purple);
+        foreach (['G1', 'G2', 'H2', 'I2'] as $c) $sheet->getStyle($c)->applyFromArray($cyan);
+        foreach (['K1', 'K2', 'L2', 'M2'] as $c) $sheet->getStyle($c)->applyFromArray($orange);
+        foreach (['N1', 'N2', 'O2', 'P2'] as $c) $sheet->getStyle($c)->applyFromArray($red);
+    }
+
+    private function escribirFilaInventarioExcel($sheet, int $row, $item, float $costo): void
+    {
+        $stock    = (float) $item->stock_sistema;
+        $fisico   = (float) $item->stock_contado;
+        $dif      = (float) $item->diferencia;
+        $faltante = $dif < 0 ? abs($dif) : 0;
+        $sobrante = $dif > 0 ? $dif : 0;
+
+        $data = [
+            'A' => $item->pro_codigo, 'B' => $item->pro_nombre, 'C' => $item->fa_nombre ?? '',
+            'D' => $stock, 'E' => $costo, 'F' => round($stock * $costo, 2),
+            'G' => $fisico, 'H' => $costo, 'I' => round($fisico * $costo, 2),
+            'J' => $dif,
+            'K' => $faltante, 'L' => $costo, 'M' => round($faltante * $costo, 2),
+            'N' => $sobrante, 'O' => $costo, 'P' => round($sobrante * $costo, 2),
+            'Q' => '',
+        ];
+        foreach ($data as $col => $value) {
+            $sheet->setCellValue($col . $row, $value);
+        }
+        $bg = $dif < 0 ? 'FEE2E2' : ($dif > 0 ? 'FEF9C3' : null);
+        if ($bg) {
+            $sheet->getStyle('A' . $row . ':Q' . $row)->applyFromArray([
+                'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => $bg]],
+            ]);
+        }
+    }
+
+    private function anchosInventarioExcel($sheet): void
+    {
+        $sheet->getColumnDimension('A')->setWidth(15);
+        $sheet->getColumnDimension('B')->setWidth(38);
+        $sheet->getColumnDimension('C')->setWidth(22);
+        foreach (['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'] as $col) {
+            $sheet->getColumnDimension($col)->setWidth(16);
+        }
+        $sheet->getColumnDimension('Q')->setWidth(22);
     }
 
     public function limpiarFormulario(): void

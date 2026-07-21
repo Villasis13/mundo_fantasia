@@ -942,9 +942,30 @@ class ReporteController extends Controller
             $sheetVentas = $spreadsheet->createSheet();
             $sheetVentas->setTitle('Comprobantes de Venta');
 
+            // Datos auxiliares por venta (batch)
+            $idsVentas = collect($d['listaVentas'])->pluck('id_venta')->filter()->all();
+            $ventasConAnticipo = empty($idsVentas) ? collect() : DB::table('venta_anticipos')
+                ->whereIn('id_venta', $idsVentas)
+                ->where('venta_anticipo_estado', 1)
+                ->pluck('id_venta')->unique()->flip();
+            $ventasConServicio = empty($idsVentas) ? collect() : DB::table('ventas_detalle')
+                ->whereIn('id_venta', $idsVentas)
+                ->whereNull('id_pro')
+                ->pluck('id_venta')->unique()->flip();
+
             $filasVentas = [];
             $n = 1;
             foreach ($d['listaVentas'] as $reg) {
+                $ajustes = [];
+                $esAnticipo = (int) ($reg->venta_es_anticipo ?? 0) === 1;
+                if ($esAnticipo)                                  $ajustes[] = 'Venta por anticipo';
+                if ($ventasConAnticipo->has($reg->id_venta))      $ajustes[] = 'Venta con anticipo aplicado';
+                if ((float) ($reg->venta_totalgratuita ?? 0) > 0) $ajustes[] = 'Venta gratuita';
+                // Si es anticipo prevalece; no se marca como servicio aunque tenga ítems de servicio
+                if (!$esAnticipo && $ventasConServicio->has($reg->id_venta)) $ajustes[] = 'Venta de servicio';
+                if ((float) ($reg->venta_vale ?? 0) > 0)          $ajustes[] = 'Venta con vale';
+                if (empty($ajustes))                               $ajustes[] = 'Venta normal';
+
                 $filasVentas[] = [
                     $n++,
                     date('d/m/Y H:i:s', strtotime($reg->venta_fecha)),
@@ -954,16 +975,17 @@ class ReporteController extends Controller
                     $reg->cliente_razonsocial,
                     $reg->id_tipo_documento == 4 ? 'RUC' : 'DNI',
                     $reg->cliente_numero,
+                    implode(', ', $ajustes),
                     $reg->simbolo . number_format($reg->venta_total, 2),
                 ];
             }
 
             $escribirSeccion($sheetVentas, 1, 'Comprobantes de Venta Emitidos',
-                ['A'=>'#','B'=>'Fecha','C'=>'Tipo','D'=>'Serie','E'=>'Número','F'=>'Cliente','G'=>'Tipo Doc','H'=>'N° Documento','I'=>'Total'],
-                $filasVentas, 'I'
+                ['A'=>'#','B'=>'Fecha','C'=>'Tipo','D'=>'Serie','E'=>'Número','F'=>'Cliente','G'=>'Tipo Doc','H'=>'N° Documento','I'=>'Tipo de venta','J'=>'Total'],
+                $filasVentas, 'J'
             );
 
-            foreach (['A'=>5,'B'=>20,'C'=>10,'D'=>10,'E'=>12,'F'=>35,'G'=>10,'H'=>14,'I'=>14] as $col => $w) {
+            foreach (['A'=>5,'B'=>20,'C'=>10,'D'=>10,'E'=>12,'F'=>35,'G'=>10,'H'=>14,'I'=>26,'J'=>14] as $col => $w) {
                 $sheetVentas->getColumnDimension($col)->setWidth($w);
             }
 
@@ -4012,6 +4034,147 @@ class ReporteController extends Controller
         }
     }
 
+    // ── Reporte de Inventario General ─────────────────────────
+    public function reporteInventarioGeneral()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista('reporte_inventario_general');
+            return view('reporte.reporte_inventario_general', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    public function reporteInventarioGeneralExcel(Request $request)
+    {
+        try {
+            $desde     = $request->get('desde');
+            $hasta     = $request->get('hasta');
+            $famId     = (int) $request->get('familia', 0);
+            $catId     = (int) $request->get('categoria', 0);
+            $busqueda  = trim((string) $request->get('busqueda', ''));
+
+            $empresa = DB::table('empresa')->orderBy('id_empresa')->first();
+
+            $productos = DB::table('productos as p')
+                ->leftJoin('categorias as c', 'c.id_ca', '=', 'p.id_ca')
+                ->leftJoin('familias as f', 'f.id_fa', '=', 'c.id_fa')
+                ->leftJoin('medida as m', 'm.id_medida', '=', 'p.id_medida')
+                ->where('p.pro_estado', 1)
+                ->when($famId > 0, fn($q) => $q->where('c.id_fa', $famId))
+                ->when($catId > 0, fn($q) => $q->where('p.id_ca', $catId))
+                ->when($busqueda !== '', fn($q) => $q->where(fn($w) =>
+                    $w->where('p.pro_nombre', 'like', "%{$busqueda}%")
+                      ->orWhere('p.pro_codigo', 'like', "%{$busqueda}%")
+                      ->orWhere('p.pro_codigo_interno', 'like', "%{$busqueda}%")))
+                ->select('p.id_pro', 'p.pro_nombre', 'p.pro_codigo', 'p.pro_codigo_interno',
+                         'p.pro_costo_total', 'p.pro_precio_venta',
+                         'f.fa_nombre', 'c.ca_nombre', 'm.medida_nombre')
+                ->orderBy('p.pro_nombre')
+                ->get();
+
+            // Stock y precio mayorista por producto (una sola consulta)
+            $idsPro = $productos->pluck('id_pro')->all();
+            $psPorPro = empty($idsPro) ? collect() : DB::table('producto_sucursal')
+                ->whereIn('id_pro', $idsPro)
+                ->select('id_pro',
+                    DB::raw('SUM(ps_stock) as stock'),
+                    DB::raw('MAX(ps_precio_uni_3) as precio_mayorista'))
+                ->groupBy('id_pro')->get()->keyBy('id_pro');
+
+            // Presentaciones por producto
+            $presPorPro = empty($idsPro) ? collect() : DB::table('producto_presentaciones')
+                ->whereIn('id_pro', $idsPro)->where('pres_estado', 1)
+                ->orderBy('pres_factor')->get()->groupBy('id_pro');
+
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Inventario General');
+
+            // Título
+            $sheet->mergeCells('A1:D1');
+            $sheet->setCellValue('A1', 'Reporte de Inventario General');
+            $sheet->getStyle('A1')->applyFromArray([
+                'font'      => ['bold' => true, 'size' => 14, 'color' => ['rgb' => '0204E6']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+
+            // Cabecera empresa (azul, negrita)
+            $azul = ['font' => ['bold' => true, 'color' => ['rgb' => '0204E6']]];
+            $sheet->setCellValue('A2', $empresa->empresa_razon_social ?? '');
+            $sheet->setCellValue('A3', $empresa->empresa_domiciliofiscal ?? '');
+            $sheet->setCellValue('A4', 'RUC N° ' . ($empresa->empresa_ruc ?? ''));
+            $sheet->getStyle('A2:A4')->applyFromArray($azul);
+            $sheet->setCellValue('A5', 'Del ' . ($desde ? date('d/m/Y', strtotime($desde)) : '—') . ' al ' . ($hasta ? date('d/m/Y', strtotime($hasta)) : '—'));
+
+            $headRow = 7;
+            $headers = ['Producto', 'Código', 'Cód. Interno', 'Familia', 'Categoría',
+                        'Presentación', 'Factor', 'Stock', 'Costo', 'Precio Público', 'Precio Mayorista'];
+            $sheet->fromArray($headers, null, "A{$headRow}");
+            $sheet->getStyle("A{$headRow}:K{$headRow}")->applyFromArray([
+                'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0204E6']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+            ]);
+
+            $r = $headRow + 1;
+            foreach ($productos as $p) {
+                $stock      = (float) ($psPorPro[$p->id_pro]->stock ?? 0);
+                $mayorista  = (float) ($psPorPro[$p->id_pro]->precio_mayorista ?? 0);
+                $presentaciones = $presPorPro->get($p->id_pro, collect());
+
+                if ($presentaciones->isEmpty()) {
+                    // Una fila con la unidad matriz
+                    $filas = [[
+                        'pres'      => $p->medida_nombre ?: 'Unidad',
+                        'factor'    => 1,
+                        'costo'     => (float) $p->pro_costo_total,
+                        'publico'   => (float) $p->pro_precio_venta,
+                        'mayorista' => $mayorista,
+                    ]];
+                } else {
+                    $filas = $presentaciones->map(fn($pr) => [
+                        'pres'      => $pr->pres_nombre,
+                        'factor'    => (float) $pr->pres_factor,
+                        'costo'     => (float) $pr->pres_precio_costo,
+                        'publico'   => (float) $pr->pres_precio_1,
+                        'mayorista' => (float) $pr->pres_precio_2,
+                    ])->all();
+                }
+
+                foreach ($filas as $fila) {
+                    $sheet->setCellValue("A{$r}", $p->pro_nombre);
+                    $sheet->setCellValueExplicit("B{$r}", (string) $p->pro_codigo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValueExplicit("C{$r}", (string) ($p->pro_codigo_interno ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValue("D{$r}", $p->fa_nombre ?? '');
+                    $sheet->setCellValue("E{$r}", $p->ca_nombre ?? '');
+                    $sheet->setCellValue("F{$r}", $fila['pres']);
+                    $sheet->setCellValue("G{$r}", $fila['factor']);
+                    $sheet->setCellValue("H{$r}", $stock);
+                    $sheet->setCellValue("I{$r}", round($fila['costo'], 2));
+                    $sheet->setCellValue("J{$r}", round($fila['publico'], 2));
+                    $sheet->setCellValue("K{$r}", round($fila['mayorista'], 2));
+                    foreach (['I','J','K'] as $col) $sheet->getStyle("{$col}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle("A{$r}:K{$r}")->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D0D0D0']]]]);
+                    $r++;
+                }
+            }
+
+            foreach (range('A', 'K') as $col) $sheet->getColumnDimension($col)->setAutoSize(true);
+
+            $nombreArchivo = 'inventario_general_' . now()->format('Ymd_His') . '.xlsx';
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header("Content-Disposition: attachment; filename=\"{$nombreArchivo}\"");
+            header('Cache-Control: max-age=0');
+            (new Xlsx($spreadsheet))->save('php://output');
+            exit;
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+        }
+    }
+
     private function obtenerDatosReporteCompras(Request $request): array
     {
         $idEmpresa  = (int) ($request->empresa  ?? 0);
@@ -4265,6 +4428,7 @@ class ReporteController extends Controller
                 ->whereRaw('DATE(COALESCE(oc.orden_compra_fecha_emision_doc, oc.orden_compra_fecha)) BETWEEN ? AND ?', [$desde, $hasta])
                 ->when($transportista !== '', fn($q) => $q->whereRaw('oc.orden_compra_transportistas LIKE ?', ['%' . $transportista . '%']))
                 ->select(
+                    'oc.id_orden_compra', 'oc.orden_compra_numero',
                     'oc.orden_compra_fecha', 'oc.orden_compra_fecha_emision_doc', 'oc.fecha_almacenamiento',
                     'oc.orden_compra_tipo_doc', 'oc.orden_compra_numero_doc', 'oc.condicion_pago',
                     'oc.orden_compra_fecha_vencimiento',
@@ -4276,24 +4440,63 @@ class ReporteController extends Controller
                 ->orderByRaw('COALESCE(oc.orden_compra_fecha_emision_doc, oc.orden_compra_fecha) ASC')
                 ->get();
 
-            $filas = $compras->map(function ($c) {
+            // Notas (crédito/débito) por orden de compra — todas (no anuladas)
+            $ocIds = $compras->pluck('id_orden_compra')->filter()->all();
+            $notasPorOc = empty($ocIds) ? collect() : DB::table('notas_compra')
+                ->whereIn('id_orden_compra', $ocIds)
+                ->where('nota_estado', '!=', 'anulado')
+                ->orderBy('id_nota_compra')
+                ->get()
+                ->groupBy('id_orden_compra');
+
+            $filas = collect();
+            foreach ($compras as $c) {
                 $subtotal = (float) $c->mercaderia - (float) ($c->orden_compra_descuento_monto ?? 0);
                 $igv      = (float) ($c->orden_compra_igv_monto ?? 0);
-                return [
-                    'fecha'     => $c->orden_compra_fecha_emision_doc ?: $c->orden_compra_fecha,
-                    'feccarga'  => $c->fecha_almacenamiento ?: $c->orden_compra_fecha,
-                    'comprob'   => trim(($c->orden_compra_tipo_doc ?? '') . ' ' . ($c->orden_compra_numero_doc ?? '')),
-                    'ruc'       => $c->proveedores_numero_documento,
-                    'proveedor' => $c->proveedores_nombre,
-                    'condicion' => strtoupper($c->condicion_pago ?? ''),
-                    'subtotal'  => round($subtotal, 2),
-                    'igv'       => round($igv, 2),
-                    'perc'      => round((float) ($c->orden_compra_percepcion_monto ?? 0), 2),
-                    'dscto'     => round((float) ($c->orden_compra_descuento_monto ?? 0), 2),
-                    'flete'     => round((float) ($c->orden_compra_flete ?? 0), 2),
-                    'total'     => round($subtotal + $igv, 2),
-                ];
-            });
+                $numDoc   = trim((string) ($c->orden_compra_numero_doc ?? ''));
+
+                // Fila de la compra
+                $filas->push([
+                    'fecha'        => $c->orden_compra_fecha_emision_doc ?: $c->orden_compra_fecha,
+                    'feccarga'     => $c->fecha_almacenamiento ?: $c->orden_compra_fecha,
+                    'numdoc'       => $numDoc,
+                    'comprob'      => trim((string) ($c->orden_compra_tipo_doc ?? '')),
+                    'nota_afecta'  => '',
+                    'nota_motivo'  => '',
+                    'ruc'          => $c->proveedores_numero_documento,
+                    'proveedor'    => $c->proveedores_nombre,
+                    'condicion'    => strtoupper($c->condicion_pago ?? ''),
+                    'subtotal'     => round($subtotal, 2),
+                    'igv'          => round($igv, 2),
+                    'perc'         => round((float) ($c->orden_compra_percepcion_monto ?? 0), 2),
+                    'dscto'        => round((float) ($c->orden_compra_descuento_monto ?? 0), 2),
+                    'flete'        => round((float) ($c->orden_compra_flete ?? 0), 2),
+                    'total'        => round($subtotal + $igv, 2),
+                ]);
+
+                // Filas de sus notas (como registros aparte)
+                foreach ($notasPorOc->get($c->id_orden_compra, collect()) as $n) {
+                    $signo    = $n->tipo_nota === 'NC' ? -1 : 1; // NC resta, DB suma
+                    $notaTot  = round($signo * (float) ($n->nota_total ?? 0), 2);
+                    $filas->push([
+                        'fecha'        => $n->nota_fecha ?: ($c->orden_compra_fecha_emision_doc ?: $c->orden_compra_fecha),
+                        'feccarga'     => $n->nota_fecha ?: '',
+                        'numdoc'       => (string) ($n->nota_numero ?? ''),
+                        'comprob'      => 'NOTA',
+                        'nota_afecta'  => $numDoc,
+                        'nota_motivo'  => (string) ($n->nota_motivo ?? ''),
+                        'ruc'          => $c->proveedores_numero_documento,
+                        'proveedor'    => $c->proveedores_nombre,
+                        'condicion'    => '',
+                        'subtotal'     => 0,
+                        'igv'          => 0,
+                        'perc'         => 0,
+                        'dscto'        => 0,
+                        'flete'        => 0,
+                        'total'        => $notaTot,
+                    ]);
+                }
+            }
 
             $spreadsheet = new Spreadsheet();
             $sheet = $spreadsheet->getActiveSheet();
@@ -4402,10 +4605,11 @@ class ReporteController extends Controller
             $sheet->getStyle('A5:A6')->getFont()->setBold(true);
 
             $headRow = 7;
-            $headers = ['ITEM', 'FECHA', 'FEC. CARGA', 'TIPO COMPROBANTE', 'RUC', 'PROVEEDOR', 'CONDICION',
+            $headers = ['ITEM', 'FECHA', 'FEC. CARGA', 'TIPO COMPROBANTE', 'N° COMPROBANTE',
+                        'COMP. AFECTADO', 'MOTIVO NOTA', 'RUC', 'PROVEEDOR', 'CONDICION',
                         'SUBTOTAL', 'IGV', 'PERC.IGV', 'DSCTO', 'FLETE', 'TOTAL'];
             $sheet->fromArray($headers, null, "A{$headRow}");
-            $sheet->getStyle("A{$headRow}:M{$headRow}")->applyFromArray([
+            $sheet->getStyle("A{$headRow}:P{$headRow}")->applyFromArray([
                 'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF'], 'size' => 9],
                 'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0204E6']],
                 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
@@ -4420,33 +4624,36 @@ class ReporteController extends Controller
                 $sheet->setCellValue("B{$r}", date('d/m/Y', strtotime($f['fecha'])));
                 $sheet->setCellValue("C{$r}", $f['feccarga'] ? date('d/m/Y', strtotime($f['feccarga'])) : '');
                 $sheet->setCellValue("D{$r}", $f['comprob']);
-                $sheet->setCellValueExplicit("E{$r}", (string) $f['ruc'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValue("F{$r}", $f['proveedor']);
-                $sheet->setCellValue("G{$r}", $f['condicion']);
-                $sheet->setCellValue("H{$r}", $f['subtotal']);
-                $sheet->setCellValue("I{$r}", $f['igv']);
-                $sheet->setCellValue("J{$r}", $f['perc']);
-                $sheet->setCellValue("K{$r}", $f['dscto']);
-                $sheet->setCellValue("L{$r}", $f['flete']);
-                $sheet->setCellValue("M{$r}", $f['total']);
-                foreach (['H','I','J','K','L','M'] as $col) $sheet->getStyle("{$col}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
-                $sheet->getStyle("A{$r}:M{$r}")->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D0D0D0']]]]);
+                $sheet->setCellValueExplicit("E{$r}", (string) $f['numdoc'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit("F{$r}", (string) $f['nota_afecta'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue("G{$r}", $f['nota_motivo']);
+                $sheet->setCellValueExplicit("H{$r}", (string) $f['ruc'], \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue("I{$r}", $f['proveedor']);
+                $sheet->setCellValue("J{$r}", $f['condicion']);
+                $sheet->setCellValue("K{$r}", $f['subtotal']);
+                $sheet->setCellValue("L{$r}", $f['igv']);
+                $sheet->setCellValue("M{$r}", $f['perc']);
+                $sheet->setCellValue("N{$r}", $f['dscto']);
+                $sheet->setCellValue("O{$r}", $f['flete']);
+                $sheet->setCellValue("P{$r}", $f['total']);
+                foreach (['K','L','M','N','O','P'] as $col) $sheet->getStyle("{$col}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle("A{$r}:P{$r}")->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D0D0D0']]]]);
                 $tSub += $f['subtotal']; $tIgv += $f['igv']; $tFlete += $f['flete']; $tTotal += $f['total'];
                 $i++; $r++;
             }
 
-            $sheet->setCellValue("G{$r}", 'TOTAL GENERAL');
-            $sheet->setCellValue("H{$r}", round($tSub, 2));
-            $sheet->setCellValue("I{$r}", round($tIgv, 2));
-            $sheet->setCellValue("L{$r}", round($tFlete, 2));
-            $sheet->setCellValue("M{$r}", round($tTotal, 2));
-            foreach (['H','I','L','M'] as $col) $sheet->getStyle("{$col}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
-            $sheet->getStyle("A{$r}:M{$r}")->applyFromArray([
+            $sheet->setCellValue("J{$r}", 'TOTAL GENERAL');
+            $sheet->setCellValue("K{$r}", round($tSub, 2));
+            $sheet->setCellValue("L{$r}", round($tIgv, 2));
+            $sheet->setCellValue("O{$r}", round($tFlete, 2));
+            $sheet->setCellValue("P{$r}", round($tTotal, 2));
+            foreach (['K','L','O','P'] as $col) $sheet->getStyle("{$col}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+            $sheet->getStyle("A{$r}:P{$r}")->applyFromArray([
                 'font' => ['bold' => true],
                 'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'BDD7EE']],
             ]);
 
-            foreach (range('A', 'M') as $col) $sheet->getColumnDimension($col)->setAutoSize(true);
+            foreach (range('A', 'P') as $col) $sheet->getColumnDimension($col)->setAutoSize(true);
             // La columna ITEM solo muestra un número pequeño: ancho fijo angosto
             $sheet->getColumnDimension('A')->setAutoSize(false)->setWidth(6);
 

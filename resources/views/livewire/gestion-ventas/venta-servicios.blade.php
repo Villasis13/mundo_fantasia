@@ -1,11 +1,88 @@
 <div>
 
+    @if(session('errorCaja'))
+        <div class="alert alert-danger alert-dismissible fade show mt-2">
+            <i class="fa-solid fa-circle-xmark me-2"></i>{{ session('errorCaja') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
     {{-- ══════ CAJA SIN APERTURA ══════ --}}
     @if (!$validarCaja)
-        <div class="alert alert-warning d-flex align-items-center gap-2 mt-2">
-            <i class="fa-solid fa-triangle-exclamation fa-lg"></i>
-            <span>Antes de continuar, debe <a href="{{ route('admin') }}" class="alert-link fw-bold">abrir la caja</a> para realizar ventas.</span>
+        {{-- Modal: Aperturar Caja (se abre automáticamente) --}}
+        <div class="modal fade" id="modalAperturaVS" wire:ignore.self tabindex="-1" aria-hidden="true"
+             data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="fa-solid fa-cash-register text-primary me-2"></i>Aperturar Caja</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        @if($cajaCerradaHoy)
+                            <div class="alert alert-warning mb-0">
+                                <i class="fa-solid fa-lock me-1"></i>Ya cerraste una caja hoy. No puedes aperturar otra hoy.
+                            </div>
+                        @elseif(empty($cajasDisponibles))
+                            <div class="alert alert-info mb-0">No hay cajas disponibles para aperturar.</div>
+                        @else
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold small">Caja</label>
+                                <select class="form-select @error('idCajaParaAbrir') is-invalid @enderror" wire:model="idCajaParaAbrir">
+                                    <option value="">— Seleccionar caja —</option>
+                                    @foreach($cajasDisponibles as $cn)
+                                        <option value="{{ $cn['id_caja_numero'] }}" @disabled($cn['ya_abierta'])>
+                                            {{ $cn['caja_numero_nombre'] }} {{ $cn['ya_abierta'] ? '(ya abierta)' : '' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('idCajaParaAbrir') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="mb-1">
+                                <label class="form-label fw-semibold small">Monto de apertura (S/)</label>
+                                <input type="number" step="0.01" min="0" class="form-control @error('montoAperturaForm') is-invalid @enderror"
+                                       wire:model="montoAperturaForm" placeholder="0.00">
+                                @error('montoAperturaForm') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+                        @endif
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+                        @if(!$cajaCerradaHoy && !empty($cajasDisponibles))
+                        <button type="button" class="btn btn-primary fw-semibold" wire:click="aperturarCajaDesdeModal"
+                                wire:loading.attr="disabled" wire:target="aperturarCajaDesdeModal">
+                            <span wire:loading.remove wire:target="aperturarCajaDesdeModal"><i class="fa-solid fa-check me-1"></i>Aperturar</span>
+                            <span wire:loading wire:target="aperturarCajaDesdeModal"><span class="spinner-border spinner-border-sm me-1"></span>Aperturando...</span>
+                        </button>
+                        @endif
+                    </div>
+                </div>
+            </div>
         </div>
+
+        @script
+        <script>
+            // Abrir el modal automáticamente al entrar sin caja
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAperturaVS')).show();
+
+            $wire.on('abrirModalAperturaVS', () => {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAperturaVS')).show();
+            });
+            $wire.on('cerrarModalAperturaVS', () => {
+                const el = document.getElementById('modalAperturaVS');
+                const m = el ? bootstrap.Modal.getInstance(el) : null;
+                if (m) m.hide();
+                // El bloque del modal se elimina del DOM al aperturar (validarCaja=true),
+                // por lo que el backdrop queda huérfano en el body. Se limpia manualmente.
+                setTimeout(() => {
+                    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.removeProperty('overflow');
+                    document.body.style.removeProperty('padding-right');
+                }, 300);
+            });
+        </script>
+        @endscript
     @endif
 
     @if ($validarCaja && !$idSucursal)

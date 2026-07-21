@@ -471,6 +471,8 @@ class Compras extends Component
         $rules = [
             'empresaIdCompra'        => 'required|integer|min:1',
             'idProveedor'            => 'required|integer|min:1',
+            'docSerie'               => 'required|string',
+            'docCorrelativo'         => 'required|string',
             'items'                  => 'required|array|min:1',
             'items.*.cantidad'       => 'required|numeric|min:0.01',
             'items.*.precio_compra'  => 'required|numeric|min:0',
@@ -489,6 +491,8 @@ class Compras extends Component
             'empresaIdCompra.min'            => 'Debes seleccionar una empresa.',
             'idSucursal.min'                 => 'Debes seleccionar una sede.',
             'idProveedor.min'                => 'Debes seleccionar un proveedor.',
+            'docSerie.required'              => 'La serie del comprobante es obligatoria.',
+            'docCorrelativo.required'        => 'El correlativo del comprobante es obligatorio.',
             'items.required'                 => 'Agrega al menos un producto.',
             'items.min'                      => 'Agrega al menos un producto.',
             'items.*.cantidad.min'           => 'La cantidad debe ser mayor a 0.',

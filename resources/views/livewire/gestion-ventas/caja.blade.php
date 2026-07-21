@@ -867,6 +867,8 @@
                     </div>
                     {{-- Toggle gratuita en el header --}}
                     <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                        {{-- Gratuita: solo si no hay vale ni anticipo aplicado --}}
+                        @if($valeMonto <= 0 && $anticipoMonto <= 0)
                         <input class="form-check-input" type="checkbox" role="switch"
                                id="switchGratuita" style="width:2.2em;height:1.15em;cursor:pointer;"
                                wire:model.live="esGratuita">
@@ -875,6 +877,14 @@
                             <i class="fa-solid fa-hand-holding-heart" style="font-size:11px;"></i>
                             Gratuita
                         </label>
+                        @endif
+                        {{-- Vale: solo si no es gratuita ni hay anticipo aplicado --}}
+                        @if(!$esGratuita && $idFormasPago == 1 && $anticipoMonto <= 0)
+                        <button type="button" class="btn btn-sm btn-outline-success ms-2" style="font-size:12px;padding:4px 10px;"
+                                wire:click="abrirModalVale">
+                            <i class="fa-solid fa-ticket me-1"></i>{{ $valeMonto > 0 ? 'Editar vale' : 'Aplicar vale' }}
+                        </button>
+                        @endif
                     </div>
                 </div>
                 <div class="rv-cb">
@@ -902,7 +912,7 @@
                                         <i class="fa-solid fa-calendar-days" style="font-size:11px;"></i> Crédito
                                     </button>
                                 </div>
-                                @if($idFormasPago == 1)
+                                @if($idFormasPago == 1 && $valeMonto <= 0)
                                     <button type="button" class="btn btn-outline-primary btn-sm mt-3"
                                             style="padding:7px 14px;font-size:13px;"
                                             wire:click="abrirModalAnticipo">
@@ -1000,15 +1010,29 @@
                                 </div>
                                 @endif
 
+                                {{-- Vale aplicado --}}
+                                @if($valeMonto > 0)
+                                <div class="d-flex align-items-center gap-2 mt-3 p-2 rounded" style="background:#E8F5E9;font-size:13px;">
+                                    <i class="fa-solid fa-ticket" style="color:#2E7D32;"></i>
+                                    <span>Vale aplicado: <strong>S/ {{ number_format($valeMonto, 2) }}</strong></span>
+                                    <button type="button" class="btn btn-sm btn-link text-primary p-0 ms-auto" wire:click="abrirModalVale" title="Editar vale">
+                                        <i class="fa-solid fa-pen"></i> Editar
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-link text-danger p-0" wire:click="quitarVale" title="Quitar vale">
+                                        <i class="fa-solid fa-xmark"></i> Quitar
+                                    </button>
+                                </div>
+                                @endif
+
                                 {{-- Resumen pagado / faltante --}}
                                 @php
                                     $totalPagadoLineas = collect($pagos)->sum(fn($p) => (float)($p['monto'] ?? 0));
                                     $totalVentaLineas  = $this->totales['total'];
-                                    $totalACubrir      = max(0, $totalVentaLineas - $anticipoMonto);
+                                    $totalACubrir      = max(0, $totalVentaLineas - $anticipoMonto - $valeMonto);
                                     $faltanteLineas    = max(0, $totalACubrir - $totalPagadoLineas);
                                     $vueltoLineas      = max(0, $totalPagadoLineas - $totalACubrir);
                                 @endphp
-                                @if($totalPagadoLineas > 0 || $anticipoVentaId)
+                                @if($totalPagadoLineas > 0 || $anticipoVentaId || $valeMonto > 0)
                                 <div class="d-flex gap-3 flex-wrap mt-3" style="font-size:14px;">
                                     <span style="color:#6c757d;">
                                         Total: <strong>S/ {{ number_format($totalVentaLineas, 2) }}</strong>
@@ -1016,6 +1040,11 @@
                                     @if($anticipoVentaId)
                                     <span style="color:#185FA5;">
                                         Anticipo: <strong>S/ {{ number_format($anticipoMonto, 2) }}</strong>
+                                    </span>
+                                    @endif
+                                    @if($valeMonto > 0)
+                                    <span style="color:#2E7D32;">
+                                        Vale: <strong>S/ {{ number_format($valeMonto, 2) }}</strong>
                                     </span>
                                     @endif
                                     <span style="color:{{ $totalPagadoLineas >= $totalACubrir ? '#3B6D11' : '#dc3545' }};">
@@ -1183,13 +1212,19 @@
                 <div class="rv-cb">
                     <div class="rv-tr-row"><span style="font-size:16px;">Op. gravada</span><span style="font-size:16px;">S/ {{ number_format($this->totales['gravada'], 2) }}</span></div>
                     <div class="rv-tr-row"><span style="font-size:16px;">IGV {{ $porcentajeIgv }}%</span><span style="font-size:16px;">S/ {{ number_format($this->totales['igv'], 2) }}</span></div>
+                    @if($valeMonto > 0)
+                        <div class="rv-tr-row" style="color:#2E7D32;">
+                            <span style="font-size:16px;">Descuento por vale</span>
+                            <span style="font-size:16px;font-weight:700;">- S/ {{ number_format($valeMonto, 2) }}</span>
+                        </div>
+                    @endif
                     @if($anticipoVentaId)
                         <div class="rv-tr-row" style="color:#185FA5;">
                             <span style="font-size:16px;">Anticipos</span>
                             <span style="font-size:16px;font-weight:700;">- S/ {{ number_format($anticipoMonto, 2) }}</span>
                         </div>
                     @endif
-                    <div class="rv-tr-row"><span style="font-size:16px;">Exonerada</span><span style="font-size:16px;">S/ {{ number_format(max(0, $this->totales['exonerada'] - $anticipoMonto), 2) }}</span></div>
+                    <div class="rv-tr-row"><span style="font-size:16px;">Exonerada</span><span style="font-size:16px;">S/ {{ number_format(max(0, $this->totales['exonerada'] - $anticipoMonto - $valeMonto), 2) }}</span></div>
                     <div class="rv-tr-row"><span style="font-size:16px;">Inafectada</span><span style="font-size:16px;">S/ {{ number_format($this->totales['inafecta'], 2) }}</span></div>
                     <div class="rv-tr-row"><span style="font-size:16px;">Gratuitas</span><span style="font-size:16px;">S/ {{ number_format($this->totales['gratuita'], 2) }}</span></div>
                     <div class="rv-tr-row"><span style="font-size:16px;">ICBPER</span><span style="font-size:16px;">S/ {{ number_format($this->totales['impuesto'], 2) }}</span></div>
@@ -1216,7 +1251,7 @@
                             Total
                         </span>
                         <span style="font-size:30px;{{ $esGratuita ? 'color:#664d03;' : '' }}">
-                            S/ {{ number_format(max(0, $this->totales['total'] - $anticipoMonto), 2) }}
+                            S/ {{ number_format(max(0, $this->totales['total'] - $anticipoMonto - $valeMonto), 2) }}
                         </span>
                     </div>
                     <button class="rv-cobrar-btn" type="button" id="btn-registrar-venta"
@@ -1500,6 +1535,30 @@
         </div>
     </div>
 
+    {{-- ══════ MODAL: APLICAR VALE ══════ --}}
+    <div class="modal fade" id="modalVale" wire:ignore.self tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa-solid fa-ticket text-success me-2"></i>Aplicar Vale</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label fw-semibold small">Monto del vale (S/)</label>
+                    <input type="number" step="0.01" min="0" class="form-control" wire:model="valeInput"
+                           placeholder="0.00" wire:keydown.enter="aplicarVale">
+                    <small class="text-muted">El monto se descuenta del total a pagar.</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn btn-success fw-semibold" wire:click="aplicarVale">
+                        <i class="fa-solid fa-check me-1"></i>Aplicar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- ══════ MODAL: DEDUCIR ANTICIPO ══════ --}}
     <div class="modal fade" id="modalAnticipo" wire:ignore.self tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
@@ -1662,6 +1721,13 @@
         // El listener hidden.bs.modal se encarga de reabrir el modal principal
     });
 
+    $wire.on('abrirModalVale', () => {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalVale')).show();
+    });
+    $wire.on('cerrarModalVale', () => {
+        const m = bootstrap.Modal.getInstance(document.getElementById('modalVale'));
+        if (m) m.hide();
+    });
     $wire.on('abrirModalAnticipo', () => {
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAnticipo')).show();
     });

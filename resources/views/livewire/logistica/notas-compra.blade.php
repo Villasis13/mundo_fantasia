@@ -272,9 +272,29 @@
 
                     {{-- Documento y referencia --}}
                     <div class="row g-3 mb-3">
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold small text-secondary mb-1">N° Doc. Proveedor</label>
-                            <input type="text" wire:model="numeroDoc" class="form-control form-control-sm" placeholder="Ej: F001-00001234">
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label fw-semibold small text-secondary mb-1">Buscar Compra (N° Comprobante)</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                                <input type="text" wire:model.live.debounce.300ms="buscarCompra" class="form-control"
+                                       placeholder="Ej: F001-00001234" autocomplete="off">
+                                @if($idOrdenRef)
+                                <button type="button" class="btn btn-outline-danger" wire:click="quitarCompra" title="Quitar compra">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                                @endif
+                            </div>
+                            @if(!empty($resultadosCompra))
+                            <div class="position-absolute w-100 shadow border rounded-2 bg-white" style="z-index:999; top:100%; max-height:220px; overflow-y:auto;">
+                                @foreach($resultadosCompra as $c)
+                                <div class="px-3 py-2 border-bottom" style="cursor:pointer;"
+                                     wire:click="seleccionarCompra({{ $c['id_orden_compra'] }})" wire:key="oc-{{ $c['id_orden_compra'] }}">
+                                    <div class="fw-semibold small">{{ $c['orden_compra_numero_doc'] ?: $c['orden_compra_numero'] }}</div>
+                                    <small class="text-muted">{{ $c['proveedores_nombre'] }} — S/ {{ number_format($c['orden_compra_total'], 2) }}</small>
+                                </div>
+                                @endforeach
+                            </div>
+                            @endif
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold small text-secondary mb-1">Fecha de Nota <span class="text-danger">*</span></label>
@@ -282,27 +302,22 @@
                             @error('fechaNota') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold small text-secondary mb-1">OC de Referencia</label>
-                            <select wire:model="idOrdenRef" class="form-select form-select-sm">
-                                <option value="">— Sin referencia —</option>
-                                @foreach($ordenesRef as $oc)
-                                <option value="{{ $oc->id_orden_compra }}">
-                                    {{ $oc->orden_compra_numero }} — S/ {{ number_format($oc->orden_compra_total, 2) }}
-                                </option>
+                            <label class="form-label fw-semibold small text-secondary mb-1">Motivo <span class="text-danger">*</span></label>
+                            <select wire:model="motivoCodigo" class="form-select form-select-sm @error('motivoCodigo') is-invalid @enderror">
+                                <option value="">— Seleccionar motivo —</option>
+                                @foreach($motivos as $m)
+                                <option value="{{ $m->codigo }}">{{ $m->codigo }} - {{ $m->tipo_nota_descripcion }}</option>
                                 @endforeach
                             </select>
-                            @if($idProveedor && $ordenesRef->isEmpty())
-                            <small class="text-muted">Sin órdenes de referencia para este proveedor.</small>
-                            @endif
+                            @error('motivoCodigo') <div class="invalid-feedback">{{ $message }}</div> @enderror
                         </div>
                     </div>
 
-                    {{-- Motivo --}}
+                    {{-- Observación / Detalle (opcional) --}}
                     <div class="mb-3">
-                        <label class="form-label fw-semibold small text-secondary mb-1">Motivo <span class="text-danger">*</span></label>
-                        <textarea wire:model="motivo" class="form-control form-control-sm @error('motivo') is-invalid @enderror"
-                            rows="2" placeholder="Describe el motivo de la nota..."></textarea>
-                        @error('motivo') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        <label class="form-label fw-semibold small text-secondary mb-1">Observación / Detalle</label>
+                        <textarea wire:model="observacion" class="form-control form-control-sm"
+                            rows="2" placeholder="Detalle adicional (opcional)..."></textarea>
                     </div>
 
                     {{-- Afecta stock --}}

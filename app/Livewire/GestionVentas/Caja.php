@@ -99,6 +99,10 @@ class Caja extends Component
     public string $antCliente      = '';
     public array  $anticiposResultados = [];
 
+    // ── Vale (descuento al pago) ──────────────────────────────
+    public float  $valeMonto  = 0.0;   // vale aplicado
+    public string $valeInput  = '';    // monto ingresado en el modal
+
     // ── Rectificar comprobante ────────────────────────────────
     public int    $rectVentaId    = 0;
     public int    $rectVendedor   = 0;
@@ -173,8 +177,7 @@ class Caja extends Component
     public function getVueltoProperty(): float
     {
         $pagado = collect($this->pagos)->sum(fn($p) => (float)($p['monto'] ?? 0));
-        $totalACubrir = max(0, $this->totales['total'] - $this->anticipoMonto);
-        return round(max(0, $pagado - $totalACubrir), 2);
+        return round(max(0, $pagado - $this->totalACubrir()), 2);
     }
 
     public function updatedEsGratuita(): void
@@ -743,11 +746,8 @@ class Caja extends Component
         $this->anticipoMonto   = (float) $v->venta_total;
         $this->anticipoInfo    = $v->venta_serie . '-' . str_pad($v->venta_correlativo, 8, '0', STR_PAD_LEFT);
 
-        // Ajustar la línea de pago al monto que falta cubrir (Total - Anticipo)
-        if ($this->idFormasPago === 1 && !$this->esGratuita) {
-            $totalACubrir = max(0, round($this->totales['total'] - $this->anticipoMonto, 2));
-            $this->pagos  = [['id_tipo_pago' => $this->idEfectivo(), 'monto' => $totalACubrir > 0 ? (string) $totalACubrir : '', 'marca_tarjeta' => '']];
-        }
+        // Ajustar la línea de pago al monto que falta cubrir (Total - Anticipo - Vale)
+        $this->ajustarPagoTotalACubrir();
 
         $this->dispatch('cerrarModalAnticipo');
     }
@@ -757,10 +757,49 @@ class Caja extends Component
         $this->anticipoVentaId = null;
         $this->anticipoMonto   = 0.0;
         $this->anticipoInfo    = '';
+        $this->ajustarPagoTotalACubrir();
+    }
+
+    // ── Vale ──────────────────────────────────────────────────
+    private function totalACubrir(): float
+    {
+        return max(0, round($this->totales['total'] - $this->anticipoMonto - $this->valeMonto, 2));
+    }
+
+    private function ajustarPagoTotalACubrir(): void
+    {
         if ($this->idFormasPago === 1 && !$this->esGratuita) {
-            $total       = $this->totales['total'];
-            $this->pagos = [['id_tipo_pago' => $this->idEfectivo(), 'monto' => $total > 0 ? (string) $total : '', 'marca_tarjeta' => '']];
+            $t = $this->totalACubrir();
+            $this->pagos = [['id_tipo_pago' => $this->idEfectivo(), 'monto' => $t > 0 ? (string) $t : '', 'marca_tarjeta' => '']];
         }
+    }
+
+    public function abrirModalVale(): void
+    {
+        $this->valeInput = $this->valeMonto > 0 ? (string) $this->valeMonto : '';
+        $this->dispatch('abrirModalVale');
+    }
+
+    public function aplicarVale(): void
+    {
+        $monto = (float) str_replace(',', '.', $this->valeInput);
+        if ($monto <= 0) {
+            session()->flash('error', 'Ingrese un monto de vale mayor a cero.');
+            return;
+        }
+        if ($monto > $this->totales['total']) {
+            $monto = $this->totales['total']; // el vale no puede superar el total
+        }
+        $this->valeMonto = round($monto, 2);
+        $this->ajustarPagoTotalACubrir();
+        $this->dispatch('cerrarModalVale');
+    }
+
+    public function quitarVale(): void
+    {
+        $this->valeMonto = 0.0;
+        $this->valeInput = '';
+        $this->ajustarPagoTotalACubrir();
     }
 
     public function guardar(): void
@@ -799,9 +838,9 @@ class Caja extends Component
                 }
             }
             $totalPagado = collect($this->pagos)->sum(fn($p) => (float)($p['monto'] ?? 0));
-            $totalACubrir = round($total - $this->anticipoMonto, 2);   // el anticipo reduce lo que falta pagar
+            $totalACubrir = max(0, round($total - $this->anticipoMonto - $this->valeMonto, 2));   // anticipo y vale reducen lo que falta pagar
             if (round($totalPagado, 2) < $totalACubrir) {
-                session()->flash('error', 'El monto recibido (S/ ' . number_format($totalPagado, 2) . ') es menor al total a pagar (S/ ' . number_format($totalACubrir, 2) . ') tras aplicar el anticipo.');
+                session()->flash('error', 'El monto recibido (S/ ' . number_format($totalPagado, 2) . ') es menor al total a pagar (S/ ' . number_format($totalACubrir, 2) . ').');
                 return;
             }
         }
@@ -849,7 +888,8 @@ class Caja extends Component
             $venta->venta_icbper             = $calc['impuesto'];
             $venta->venta_total              = $calc['total'];
             $venta->venta_pago_cliente       = $pagoClient;
-            $venta->venta_vuelto             = ($this->esGratuita || $this->idFormasPago !== 1) ? 0 : max(0, $pagoClient - max(0, $calc['total'] - $this->anticipoMonto));
+            $venta->venta_vuelto             = ($this->esGratuita || $this->idFormasPago !== 1) ? 0 : max(0, $pagoClient - max(0, $calc['total'] - $this->anticipoMonto - $this->valeMonto));
+            $venta->venta_vale               = ($this->esGratuita || $this->idFormasPago !== 1) ? 0 : round($this->valeMonto, 2);
             $venta->venta_fecha              = now()->format('Y-m-d H:i:s');
             $venta->tipo_documento_modificar = '';
             $venta->serie_modificar          = null;
@@ -1464,6 +1504,8 @@ class Caja extends Component
         $this->anticipoVentaId         = null;
         $this->anticipoMonto           = 0.0;
         $this->anticipoInfo            = '';
+        $this->valeMonto               = 0.0;
+        $this->valeInput               = '';
         $this->resetErrorBag();
     }
 
@@ -1472,11 +1514,11 @@ class Caja extends Component
         if ($this->esGratuita) return;
         $this->idFormasPago = $id;
         if ($id === 1) {
-            $total       = max(0, $this->totales['total'] - $this->anticipoMonto);
-            $this->pagos = [['id_tipo_pago' => $this->idEfectivo(), 'monto' => $total > 0 ? (string) $total : '', 'marca_tarjeta' => '']];
+            $this->ajustarPagoTotalACubrir();
         } else {
-            // El anticipo solo aplica al contado
-            $this->quitarAnticipo();
+            // El anticipo y el vale solo aplican al contado
+            $this->anticipoVentaId = null; $this->anticipoMonto = 0.0; $this->anticipoInfo = '';
+            $this->valeMonto = 0.0; $this->valeInput = '';
             $this->pagos = [];
         }
     }

@@ -588,18 +588,20 @@
                 </div>
 
                 <div class="col">
-                    <label class="form-label fw-semibold small text-secondary mb-1">Comprobante</label>
+                    <label class="form-label fw-semibold small text-secondary mb-1">Comprobante <span class="text-danger">*</span></label>
                     <div class="input-group input-group-sm">
                         <select class="form-select" style="max-width:115px;" wire:model="tipoDoc" data-compra-nav>
                             <option value="">— Tipo —</option>
                             <option value="BOLETA">Boleta</option>
                             <option value="FACTURA">Factura</option>
                         </select>
-                        <input type="text" class="form-control" style="max-width:80px;"
-                               wire:model="docSerie" placeholder="Serie" maxlength="10" data-compra-nav>
-                        <input type="text" class="form-control"
-                               wire:model="docCorrelativo" placeholder="Correlativo" maxlength="20" data-compra-nav>
+                        <input type="text" class="form-control @error('docSerie') is-invalid @enderror" style="max-width:80px;"
+                               wire:model="docSerie" placeholder="Serie *" maxlength="10" data-compra-nav>
+                        <input type="text" class="form-control @error('docCorrelativo') is-invalid @enderror"
+                               wire:model="docCorrelativo" placeholder="Correlativo *" maxlength="20" data-compra-nav>
                     </div>
+                    @error('docSerie') <small class="text-danger d-block">{{ $message }}</small> @enderror
+                    @error('docCorrelativo') <small class="text-danger d-block">{{ $message }}</small> @enderror
                 </div>
 
                 <div class="col-auto" style="min-width:120px;">

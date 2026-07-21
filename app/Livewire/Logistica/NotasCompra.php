@@ -32,6 +32,11 @@ class NotasCompra extends Component
     public string $buscarProducto = '';
     public array  $resultados     = [];
 
+    // ── Buscador de compras (por N° de comprobante) + motivo ──
+    public string $motivoCodigo     = '';
+    public string $buscarCompra     = '';
+    public array  $resultadosCompra = [];
+
     // ── Filtros historial ──────────────────────────────────────
     public string $filtroTipo      = '';
     public string $filtroEstado    = '';
@@ -91,10 +96,77 @@ class NotasCompra extends Component
             'tipo', 'idEmpresa', 'idProveedor', 'idOrdenRef', 'numeroDoc',
             'fechaNota', 'motivo', 'afectaStock', 'idAlmacen', 'observacion',
             'items', 'total', 'buscarProducto', 'resultados',
+            'motivoCodigo', 'buscarCompra', 'resultadosCompra',
             'idAccion', 'accionTipo', 'motivoAccion',
         ]);
         $this->tipo = 'NC';
         $this->resetErrorBag();
+    }
+
+    // ── Búsqueda de compras por N° de comprobante ──────────────
+    public function updatedBuscarCompra(): void
+    {
+        $q = trim($this->buscarCompra);
+        if (strlen($q) < 2) { $this->resultadosCompra = []; return; }
+
+        $this->resultadosCompra = DB::table('orden_compra as oc')
+            ->leftJoin('proveedores as pr', 'pr.id_proveedores', '=', 'oc.id_proveedores')
+            ->where('oc.orden_compra_estado', '!=', 'anulado')
+            ->where('oc.orden_compra_numero_doc', 'like', "%{$q}%")
+            // Solo compras que NO tienen una nota (crédito/débito) no anulada
+            ->whereNotExists(function ($sub) {
+                $sub->from('notas_compra as nc')
+                    ->whereColumn('nc.id_orden_compra', 'oc.id_orden_compra')
+                    ->where('nc.nota_estado', '!=', 'anulado');
+            })
+            ->select('oc.id_orden_compra', 'oc.orden_compra_numero', 'oc.orden_compra_numero_doc',
+                     'oc.orden_compra_total', 'oc.id_proveedores', 'oc.id_empresa',
+                     'pr.proveedores_nombre')
+            ->orderByDesc('oc.id_orden_compra')
+            ->limit(10)
+            ->get()
+            ->map(fn($r) => (array) $r)
+            ->toArray();
+    }
+
+    public function seleccionarCompra(int $idOrden): void
+    {
+        $oc = DB::table('orden_compra')->where('id_orden_compra', $idOrden)->first();
+        if (!$oc) return;
+
+        $this->idOrdenRef  = (string) $idOrden;
+        $this->numeroDoc   = $oc->orden_compra_numero_doc ?: $oc->orden_compra_numero;
+        $this->idProveedor = (int) $oc->id_proveedores;
+        $this->idEmpresa   = (int) ($oc->id_empresa ?? 0);
+        $this->buscarCompra     = $this->numeroDoc;
+        $this->resultadosCompra = [];
+
+        // Cargar los ítems del comprobante (los que afecta la nota)
+        $detalle = DB::table('orden_compra_detalle')
+            ->where('id_orden_compra', $idOrden)
+            ->where('detalle_compra_estado', 1)
+            ->get();
+
+        $this->items = $detalle->map(fn($d) => [
+            'id_pro'   => (int) $d->id_pro,
+            'nombre'   => $d->detalle_orden_nombre_producto,
+            'precio'   => round((float) $d->detalle_compra_precio_compra, 2),
+            'cantidad' => (float) $d->detalle_compra_cantidad,
+            'total'    => round((float) $d->detalle_compra_precio_compra * (float) $d->detalle_compra_cantidad, 2),
+            'stock'    => 0,
+        ])->toArray();
+
+        $this->calcularTotal();
+    }
+
+    public function quitarCompra(): void
+    {
+        $this->idOrdenRef  = '';
+        $this->numeroDoc   = '';
+        $this->buscarCompra = '';
+        $this->resultadosCompra = [];
+        $this->items = [];
+        $this->total = 0;
     }
 
     // ── Búsqueda de productos ──────────────────────────────────
@@ -166,16 +238,21 @@ class NotasCompra extends Component
     public function guardar(): void
     {
         $this->validate([
-            'tipo'        => 'required|in:NC,DB',
-            'idProveedor' => 'required|integer|min:1',
-            'fechaNota'   => 'required|date',
-            'motivo'      => 'required|string|min:5|max:500',
-            'items'       => 'required|array|min:1',
+            'tipo'         => 'required|in:NC,DB',
+            'idProveedor'  => 'required|integer|min:1',
+            'fechaNota'    => 'required|date',
+            'motivoCodigo' => 'required|string',
+            'items'        => 'required|array|min:1',
         ], [
-            'idProveedor.min'  => 'Selecciona un proveedor.',
-            'motivo.min'       => 'El motivo debe tener al menos 5 caracteres.',
-            'items.min'        => 'Agrega al menos un ítem.',
+            'idProveedor.min'      => 'Selecciona un proveedor.',
+            'motivoCodigo.required' => 'Selecciona el motivo.',
+            'items.min'            => 'Agrega al menos un ítem.',
         ]);
+
+        // Descripción del motivo seleccionado
+        $tablaMotivo = $this->tipo === 'NC' ? 'tipo_ncreditos' : 'tipo_ndebitos';
+        $motivoDesc  = DB::table($tablaMotivo)->where('codigo', $this->motivoCodigo)->value('tipo_nota_descripcion') ?? '';
+        $motivoFinal = $this->motivoCodigo . ' - ' . $motivoDesc;
 
         $this->calcularTotal();
 
@@ -200,7 +277,7 @@ class NotasCompra extends Component
                 'nota_numero'     => $numero,
                 'nota_numero_doc' => $this->numeroDoc  ?: null,
                 'nota_fecha'      => $this->fechaNota,
-                'nota_motivo'     => $this->motivo,
+                'nota_motivo'     => $motivoFinal,
                 'nota_total'      => $this->total,
                 'nota_afecta_stock' => $this->afectaStock ? 1 : 0,
                 'nota_estado'     => 'pendiente',
@@ -489,8 +566,14 @@ class NotasCompra extends Component
 
         $notas = $query->orderByDesc('n.id_nota_compra')->paginate($this->porPagina);
 
+        // Motivos según el tipo de nota (NC = crédito, DB = débito)
+        $motivos = DB::table($this->tipo === 'NC' ? 'tipo_ncreditos' : 'tipo_ndebitos')
+            ->where('estado', 1)
+            ->orderBy('codigo')
+            ->get(['codigo', 'tipo_nota_descripcion']);
+
         return view('livewire.logistica.notas-compra', compact(
-            'empresas', 'proveedores', 'almacenes', 'ordenesRef', 'notas'
+            'empresas', 'proveedores', 'almacenes', 'ordenesRef', 'notas', 'motivos'
         ));
     }
 }

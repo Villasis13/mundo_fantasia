@@ -1,5 +1,12 @@
 <div class="container-fluid py-3">
 
+    {{-- Título del módulo --}}
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h5 class="mb-0 fw-bold">
+            <i class="fa-solid fa-file-invoice-dollar me-2 text-primary"></i>Reporte de Compras
+        </h5>
+    </div>
+
     @if (session()->has('error'))
         <div class="alert alert-danger alert-dismissible fade show">
             {{ session('error') }}

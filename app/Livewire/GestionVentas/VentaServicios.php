@@ -37,6 +37,12 @@ class VentaServicios extends Component
     public string $nombreSucursal = '';
     public string $nombreCaja     = '';
 
+    // ── Apertura de caja (modal) ─────────────────────────────────
+    public array  $cajasDisponibles = [];
+    public string $idCajaParaAbrir  = '';
+    public string $montoAperturaForm = '';
+    public bool   $cajaCerradaHoy   = false;
+
     // ── Comprobante / Serie ──────────────────────────────────────
     public string $tipoComprobante = '03';
     public array  $series          = [];
@@ -106,6 +112,127 @@ class VentaServicios extends Component
         $this->tiposPago = DB::table('tipo_pago')->where('tipo_pago_estado', 1)->get()->toArray();
         $this->cargarSeries();
         $this->agregarLinea();
+
+        // Si no hay caja abierta, precargar las cajas para el modal (se abre solo)
+        if (!$this->validarCaja) {
+            $this->cargarCajasDisponibles();
+        }
+    }
+
+    // =========================================================
+    //  APERTURA DE CAJA (modal)
+    // =========================================================
+    public function abrirModalApertura(): void
+    {
+        $this->cargarCajasDisponibles();
+        $this->dispatch('abrirModalAperturaVS');
+    }
+
+    private function cargarCajasDisponibles(): void
+    {
+        $hoy    = now()->toDateString();
+        $userId = auth()->user()->id_users;
+
+        $this->cajaCerradaHoy = DB::table('caja')
+            ->where('id_users_apertura', $userId)
+            ->where('caja_fecha', $hoy)
+            ->where('caja_estado', 0)
+            ->exists();
+
+        if ($this->cajaCerradaHoy) {
+            $this->cajasDisponibles = [];
+            $this->idCajaParaAbrir  = '';
+            return;
+        }
+
+        $idTienda = DB::table('user_tienda')->where('id_users', $userId)->value('id_tienda');
+
+        $query = DB::table('caja_numero as cn')
+            ->leftJoin('caja as c', function ($j) use ($hoy) {
+                $j->on('c.id_caja_numero', '=', 'cn.id_caja_numero')
+                  ->where('c.caja_fecha', $hoy)
+                  ->where('c.caja_estado', 1);
+            })
+            ->where('cn.caja_numero_estado', 1)
+            ->orderBy('cn.caja_numero_nombre')
+            ->select('cn.id_caja_numero', 'cn.caja_numero_nombre',
+                     DB::raw('CASE WHEN c.id_caja IS NOT NULL THEN 1 ELSE 0 END as ya_abierta'));
+
+        if ($idTienda) $query->where('cn.id_tienda', $idTienda);
+
+        $this->cajasDisponibles = $query->get()
+            ->map(fn($c) => [
+                'id_caja_numero'     => $c->id_caja_numero,
+                'caja_numero_nombre' => $c->caja_numero_nombre,
+                'ya_abierta'         => (bool) $c->ya_abierta,
+            ])->toArray();
+
+        $this->idCajaParaAbrir = '';
+        foreach ($this->cajasDisponibles as $cn) {
+            if (!$cn['ya_abierta']) { $this->idCajaParaAbrir = (string) $cn['id_caja_numero']; break; }
+        }
+    }
+
+    public function aperturarCajaDesdeModal(): void
+    {
+        $this->validate([
+            'idCajaParaAbrir'   => 'required',
+            'montoAperturaForm' => 'required|numeric|min:0',
+        ], [
+            'idCajaParaAbrir.required'   => 'Seleccione una caja.',
+            'montoAperturaForm.required' => 'Ingrese el monto de apertura.',
+            'montoAperturaForm.numeric'  => 'El monto debe ser un número válido.',
+            'montoAperturaForm.min'      => 'El monto no puede ser negativo.',
+        ]);
+
+        try {
+            if (DB::table('caja')->where('id_users_apertura', auth()->id())->where('caja_fecha', now()->toDateString())->where('caja_estado', 1)->exists()) {
+                session()->flash('errorCaja', 'Ya tienes una caja aperturada hoy.');
+                return;
+            }
+            if (DB::table('caja')->where('id_caja_numero', $this->idCajaParaAbrir)->where('caja_fecha', now()->toDateString())->where('caja_estado', 1)->exists()) {
+                session()->flash('errorCaja', 'Esta caja ya se encuentra aperturada.');
+                return;
+            }
+
+            DB::table('caja')->insert([
+                'id_caja_numero'      => $this->idCajaParaAbrir,
+                'caja_fecha'          => now()->toDateString(),
+                'id_users_apertura'   => auth()->id(),
+                'caja_apertura'       => $this->montoAperturaForm,
+                'caja_fecha_apertura' => now()->toDateTimeString(),
+                'caja_estado'         => 1,
+                'created_at'          => now(),
+                'updated_at'          => now(),
+            ]);
+
+            $caja = (new Caja())->buscar_apertura_caja();
+            if ($caja) {
+                $this->validarCaja  = true;
+                $this->idCaja       = (int) $caja->id_caja;
+                $this->idCajaNumero = (int) $caja->id_caja_numero;
+
+                $cn = DB::table('caja_numero')->where('id_caja_numero', $this->idCajaNumero)->first();
+                $this->idSucursal = (int) ($cn->id_tienda ?? 0);
+                $this->nombreCaja = $cn->caja_numero_nombre ?? '';
+
+                if ($this->idSucursal) {
+                    $suc = DB::table('tiendas')->where('id_tienda', $this->idSucursal)->first();
+                    $this->idEmpresa      = (int) ($suc->id_empresa ?? 1);
+                    $this->nombreSucursal = $suc->tienda_nombre ?? '';
+                }
+
+                $this->cargarSeries();
+            }
+
+            $this->montoAperturaForm = '';
+            $this->cajasDisponibles  = [];
+            $this->dispatch('cerrarModalAperturaVS');
+            session()->flash('success', 'Caja aperturada correctamente.');
+        } catch (\Exception $e) {
+            (new Logs())->insertarLog($e);
+            session()->flash('errorCaja', 'Error al aperturar la caja. Intente nuevamente.');
+        }
     }
 
     // =========================================================

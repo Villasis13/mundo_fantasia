@@ -57,6 +57,13 @@
                     </select>
                 </div>
                 <div class="col-12 col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-primary btn-sm w-100" wire:click="buscar"
+                            wire:loading.attr="disabled" wire:target="buscar">
+                        <span wire:loading.remove wire:target="buscar"><i class="fa-solid fa-magnifying-glass me-1"></i> Buscar</span>
+                        <span wire:loading wire:target="buscar"><span class="spinner-border spinner-border-sm"></span></span>
+                    </button>
+                </div>
+                <div class="col-12 col-md-2 d-flex align-items-end">
                     <button type="button" class="btn btn-outline-primary btn-sm w-100"
                             data-bs-toggle="modal" data-bs-target="#modalReporteVentas">
                         <i class="fa-solid fa-file-lines me-1"></i> Resumen de Venta

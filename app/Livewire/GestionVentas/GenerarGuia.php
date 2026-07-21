@@ -22,8 +22,9 @@ class GenerarGuia extends Component
 
     // ── Sección 2: Cliente / Destinatario ─────────────────────
     public ?int   $idClientes   = null;
-    public ?int   $idVenta      = null;
+    public ?int   $idVenta      = null;          // primer documento (compat)
     public string $facturaVinculada = '';
+    public array  $documentos   = [];            // varios comprobantes vinculados
     public string $cliTipoDoc   = '';
     public string $cliNumDoc    = '';
     public string $cliNombre    = '';
@@ -276,12 +277,24 @@ class GenerarGuia extends Component
             ->leftJoin('ventas_anulados as va', 'va.id_venta', '=', 'v.id_venta')
             ->whereNull('va.id_venta')
             ->whereIn('v.venta_tipo', ['01', '03', '20'])
+            // No listar anticipos (Venta de Servicios marcada como anticipo)
+            ->where(fn($w) => $w->where('v.venta_es_anticipo', '!=', 1)->orWhereNull('v.venta_es_anticipo'))
             // Solo ventas que aún NO están vinculadas a una guía (activa)
             ->whereNotExists(function ($sub) {
                 $sub->select(DB::raw(1))->from('guias_remision as gx')
                     ->whereColumn('gx.id_venta', 'v.id_venta')
                     ->where('gx.guia_estado', '!=', 0);
             })
+            // Ni vinculadas como documento en otra guía activa
+            ->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))->from('guias_remision_documentos as gd')
+                    ->join('guias_remision as g2', 'g2.id_guia', '=', 'gd.id_guia')
+                    ->whereColumn('gd.id_venta', 'v.id_venta')
+                    ->where('gd.guia_doc_estado', 1)
+                    ->where('g2.guia_estado', '!=', 0);
+            })
+            // Ni las ya agregadas en esta misma sesión
+            ->when(!empty($this->documentos), fn($qq) => $qq->whereNotIn('v.id_venta', collect($this->documentos)->pluck('id_venta')->all()))
             ->select(
                 'v.id_venta', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_total', 'v.id_clientes',
                 'v.venta_tipo', 'v.venta_fecha',
@@ -338,6 +351,14 @@ class GenerarGuia extends Component
         $idVenta = (int) $idVenta;
         if ($idVenta <= 0) return;
 
+        // Evitar duplicar el mismo comprobante
+        foreach ($this->documentos as $d) {
+            if ((int) $d['id_venta'] === $idVenta) {
+                $this->factMensaje = 'Ese comprobante ya está vinculado.';
+                return;
+            }
+        }
+
         $v = DB::table('ventas as v')
             ->join('clientes as c', 'c.id_clientes', '=', 'v.id_clientes')
             ->where('v.id_venta', $idVenta)
@@ -345,42 +366,87 @@ class GenerarGuia extends Component
             ->first();
         if (!$v) return;
 
-        $this->idVenta          = $idVenta;
-        $this->facturaVinculada = $v->venta_serie . '-' . str_pad((string) $v->venta_correlativo, 8, '0', STR_PAD_LEFT);
-        $this->idClientes  = (int) $v->id_clientes;
-        $this->cliTipoDoc  = (string) $v->id_tipo_documento;
-        $this->cliNumDoc   = $v->cliente_numero ?? '';
-        $this->cliNombre   = $v->cliente_razonsocial ?: ($v->cliente_nombre ?? '');
-        $this->cliDireccion = $v->cliente_direccion ?? '';
+        // Validar que todos los documentos sean del MISMO cliente
+        if (!empty($this->documentos) && $this->idClientes && (int) $v->id_clientes !== (int) $this->idClientes) {
+            $this->factMensaje = 'Solo puede vincular comprobantes del mismo cliente/destinatario.';
+            return;
+        }
 
-        // Cargar productos de la venta como ítems
+        $tipos = ['01' => 'Factura', '03' => 'Boleta', '20' => 'Nota de Venta', '07' => 'N. Crédito', '08' => 'N. Débito'];
+        $comprobante = $v->venta_serie . '-' . str_pad((string) $v->venta_correlativo, 8, '0', STR_PAD_LEFT);
+
+        // Agregar a la lista de documentos relacionados
+        $this->documentos[] = [
+            'id_venta'    => $idVenta,
+            'tipo'        => $v->venta_tipo,
+            'tipo_nombre' => $tipos[$v->venta_tipo] ?? $v->venta_tipo,
+            'comprobante' => $comprobante,
+            'serie'       => $v->venta_serie,
+            'correlativo' => str_pad((string) $v->venta_correlativo, 8, '0', STR_PAD_LEFT),
+            'fecha'       => \Carbon\Carbon::parse($v->venta_fecha)->format('Y-m-d'),
+            'total'       => (float) $v->venta_total,
+        ];
+
+        // Datos del destinatario: tomar del primer documento vinculado
+        if (count($this->documentos) === 1) {
+            $this->idVenta          = $idVenta;
+            $this->facturaVinculada = $comprobante;
+            $this->idClientes  = (int) $v->id_clientes;
+            $this->cliTipoDoc  = (string) $v->id_tipo_documento;
+            $this->cliNumDoc   = $v->cliente_numero ?? '';
+            $this->cliNombre   = $v->cliente_razonsocial ?: ($v->cliente_nombre ?? '');
+            $this->cliDireccion = $v->cliente_direccion ?? '';
+        }
+
+        // Agregar los productos de la venta a los bienes a trasladar (etiquetados con id_venta)
         $det = DB::table('ventas_detalle as vd')
             ->leftJoin('productos as p', 'p.id_pro', '=', 'vd.id_pro')
             ->where('vd.id_venta', $idVenta)
             ->select('vd.id_pro', 'vd.venta_detalle_nombre_producto', 'vd.venta_detalle_cantidad',
                      'vd.venta_detalle_precio_unitario', 'p.pro_codigo')
             ->get();
-        $this->items = $det->map(fn($d) => [
-            'id_pro'      => $d->id_pro,
-            'codigo'      => $d->pro_codigo ?? '',
-            'descripcion' => $d->venta_detalle_nombre_producto,
-            'um'          => 'NIU',
-            'cantidad'    => (string) (int) $d->venta_detalle_cantidad,
-            'precio'      => (float) $d->venta_detalle_precio_unitario,
-            'peso'        => '',
-            'observacion' => '',
-        ])->toArray();
+        foreach ($det as $d) {
+            $this->items[] = [
+                'id_venta'    => $idVenta,
+                'id_pro'      => $d->id_pro,
+                'codigo'      => $d->pro_codigo ?? '',
+                'descripcion' => $d->venta_detalle_nombre_producto,
+                'um'          => 'NIU',
+                'cantidad'    => (string) (int) $d->venta_detalle_cantidad,
+                'precio'      => (float) $d->venta_detalle_precio_unitario,
+                'peso'        => '',
+                'observacion' => '',
+            ];
+        }
 
-        $this->factResultados = [];
-        $this->factFiltro = '';
-        $this->dispatch('cerrarModalFacturaGuia');
-        session()->flash('success', 'Factura ' . $v->venta_serie . '-' . $v->venta_correlativo . ' vinculada.');
+        // Refrescar la búsqueda para que el comprobante ya vinculado no reaparezca
+        $this->buscarFactura();
+        session()->flash('success', 'Comprobante ' . $comprobante . ' vinculado.');
+    }
+
+    public function quitarDocumento($idVenta = 0): void
+    {
+        $idVenta = (int) $idVenta;
+        // Quitar de la lista de documentos
+        $this->documentos = array_values(array_filter($this->documentos, fn($d) => (int) $d['id_venta'] !== $idVenta));
+        // Quitar sus productos de los bienes
+        $this->items = array_values(array_filter($this->items, fn($it) => (int) ($it['id_venta'] ?? 0) !== $idVenta));
+
+        // Recalcular datos del destinatario si quedaron documentos
+        if (empty($this->documentos)) {
+            $this->idVenta = null;
+            $this->facturaVinculada = '';
+        } elseif ($this->idVenta === $idVenta) {
+            $this->idVenta = (int) $this->documentos[0]['id_venta'];
+            $this->facturaVinculada = $this->documentos[0]['comprobante'];
+        }
     }
 
     public function desvincularFactura(): void
     {
         $this->idVenta = null;
         $this->facturaVinculada = '';
+        $this->documentos = [];
         $this->items = [];
     }
 
@@ -478,6 +544,23 @@ class GenerarGuia extends Component
                 ]);
             }
 
+            // Documentos relacionados (varias facturas/boletas)
+            foreach ($this->documentos as $doc) {
+                DB::table('guias_remision_documentos')->insert([
+                    'id_guia'              => $idGuia,
+                    'id_venta'             => (int) $doc['id_venta'],
+                    'guia_doc_tipo'        => $doc['tipo'] ?? null,
+                    'guia_doc_serie'       => $doc['serie'] ?? null,
+                    'guia_doc_correlativo' => $doc['correlativo'] ?? null,
+                    'guia_doc_fecha'       => $doc['fecha'] ?? null,
+                    'guia_doc_total'       => (float) ($doc['total'] ?? 0),
+                    'guia_doc_microtime'   => (string) microtime(true),
+                    'guia_doc_estado'      => 1,
+                    'created_at'           => now(),
+                    'updated_at'           => now(),
+                ]);
+            }
+
             DB::commit();
             $numeroMostrar = $serie . '-' . str_pad((string) $correlativo, 8, '0', STR_PAD_LEFT);
             session()->flash('success', "Guía {$numeroMostrar} registrada correctamente.");
@@ -497,7 +580,7 @@ class GenerarGuia extends Component
     private function resetFormulario(): void
     {
         $this->reset([
-            'guiaObservacion', 'idClientes', 'idVenta', 'facturaVinculada', 'cliTipoDoc', 'cliNumDoc', 'cliNombre', 'cliDireccion',
+            'guiaObservacion', 'idClientes', 'idVenta', 'facturaVinculada', 'documentos', 'cliTipoDoc', 'cliNumDoc', 'cliNombre', 'cliDireccion',
             'cliDistrito', 'cliProvincia', 'cliDepartamento',
             'transRuc', 'transNombre', 'vehPlaca', 'vehMarca', 'vehCarreta', 'certMtc',
             'condNumDoc', 'condNombre', 'condApellidos', 'condLicencia',

@@ -549,6 +549,20 @@
                         <input type="date" class="form-control" wire:model.live="filtroHasta">
                     </div>
                 </div>
+                <div class="col-auto">
+                    <button type="button" class="btn btn-sm btn-success"
+                            wire:click="exportarExcelConsolidado"
+                            wire:loading.attr="disabled" wire:target="exportarExcelConsolidado"
+                            title="Descargar Excel consolidado del período">
+                        <span wire:loading.remove wire:target="exportarExcelConsolidado">
+                            <img src="{{ asset('iconos_svg/microsoft-excel.svg') }}" style="width:14px;height:14px;vertical-align:middle;">
+                            Consolidado
+                        </span>
+                        <span wire:loading wire:target="exportarExcelConsolidado">
+                            <span class="spinner-border spinner-border-sm"></span> Consolidado
+                        </span>
+                    </button>
+                </div>
             </div>
         </div>
 

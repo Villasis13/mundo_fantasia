@@ -19,16 +19,15 @@
             <a href="{{ route('Gestionventas.guias_remision') }}" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-arrow-left"></i></a>
             <h5 class="fw-bold mb-0"><i class="fa-solid fa-truck-fast me-2 text-primary"></i>Nueva Guía de Remisión</h5>
         </div>
-        @if($idVenta)
-            <span class="badge bg-success p-2"><i class="fa-solid fa-link me-1"></i>Factura vinculada: {{ $facturaVinculada }}
-                <button type="button" class="btn-close btn-close-white ms-2" wire:click="desvincularFactura"></button>
-            </span>
-        @else
+        <div class="d-flex align-items-center gap-2">
+            @if(count($documentos))
+                <span class="badge bg-success p-2"><i class="fa-solid fa-link me-1"></i>{{ count($documentos) }} documento(s) vinculado(s)</span>
+            @endif
             <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#modalFacturaGuia"
                     wire:click="cargarFacturasIniciales">
                 <i class="fa-solid fa-link me-1"></i>Cargar Factura/Boleta
             </button>
-        @endif
+        </div>
     </div>
 
     {{-- ════════ UN SOLO CARD, BLOQUES SIN TÍTULOS ════════ --}}
@@ -152,10 +151,20 @@
                     <label class="form-label small fw-semibold text-secondary">Cantidad de bultos</label>
                     <input type="number" min="0" class="form-control form-control-sm" wire:model="nroBultos">
                 </div>
-                @if($idVenta)
-                <div class="col-md-6">
+                @if(count($documentos))
+                <div class="col-12">
                     <label class="form-label small fw-semibold text-secondary">Documentos Relacionados</label>
-                    <input type="text" class="form-control form-control-sm fw-semibold text-success" value="{{ $facturaVinculada }}" disabled>
+                    <div class="d-flex flex-wrap gap-2">
+                        @foreach($documentos as $doc)
+                        <span class="badge bg-light text-dark border p-2 d-flex align-items-center gap-2" style="font-size:.8rem;">
+                            <i class="fa-solid fa-file-invoice text-success"></i>
+                            <span class="fw-semibold">{{ $doc['tipo_nombre'] }} {{ $doc['comprobante'] }}</span>
+                            <span class="text-muted">S/ {{ number_format($doc['total'], 2) }}</span>
+                            <button type="button" class="btn-close" style="font-size:.6rem;"
+                                    wire:click="quitarDocumento('{{ $doc['id_venta'] }}')" title="Quitar documento"></button>
+                        </span>
+                        @endforeach
+                    </div>
                 </div>
                 @endif
             </div>
@@ -273,13 +282,17 @@
             <div class="modal-content">
                 <div class="modal-header"><h6 class="modal-title fw-bold">Cargar Factura a la Guía de Remisión</h6><button class="btn-close" data-bs-dismiss="modal"></button></div>
                 <div class="modal-body">
+                    @if($factMensaje)
+                        <div class="alert alert-warning py-2 small d-flex align-items-center gap-2 mb-2">
+                            <i class="fa-solid fa-triangle-exclamation"></i>{{ $factMensaje }}
+                        </div>
+                    @endif
                     <div class="mb-2">
                         <label class="form-label small">Filtrar</label>
                         <input type="text" class="form-control form-control-sm"
                                wire:model.live.debounce.400ms="factFiltro"
                                placeholder="Serie - Correlativo (ej. B001-00)">
                     </div>
-                    @if($factMensaje)<div class="alert alert-warning py-1 small">{{ $factMensaje }}</div>@endif
                     @if(count($factResultados))
                     <table class="table table-sm table-hover align-middle">
                         <thead class="table-light"><tr><th>Tipo</th><th>Comprobante</th><th>Fecha</th><th>Cliente</th><th class="text-end">Total</th><th></th></tr></thead>

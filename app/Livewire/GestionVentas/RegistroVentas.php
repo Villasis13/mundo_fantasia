@@ -70,6 +70,8 @@ class RegistroVentas extends Component
     public function updatedFiltroEstado(): void     { $this->filtrado = true; $this->resetPage(); }
     public function updatingPorPagina(): void     { $this->resetPage(); }
 
+    public function buscar(): void { $this->filtrado = true; $this->resetPage(); }
+
     private function baseQuery()
     {
         return DB::table('ventas as v')

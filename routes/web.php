@@ -250,6 +250,8 @@ Route::prefix('reporte')->middleware(['auth', 'verifyUserStatus'])->group(functi
     Route::get('/reporte_compras',        [ReporteController::class, 'reporteCompras'])->name('reporte.reporte_compras')->middleware('can:reporte_compras.submenu');
     Route::get('/reporte_compras/pdf',    [ReporteController::class, 'reporteComprasPdf'])->name('reporte.reporte_compras_pdf')->middleware('can:reporte_compras.exportar');
     Route::get('/reporte_compras/excel',  [ReporteController::class, 'reporteComprasExcel'])->name('reporte.reporte_compras_excel')->middleware('can:reporte_compras.exportar');
+    Route::get('/reporte_inventario_general',       [ReporteController::class, 'reporteInventarioGeneral'])->name('reporte.reporte_inventario_general')->middleware('can:reporte_inventario_general.submenu');
+    Route::get('/reporte_inventario_general/excel', [ReporteController::class, 'reporteInventarioGeneralExcel'])->name('reporte.reporte_inventario_general_excel')->middleware('can:reporte_inventario_general.exportar');
 
     Route::get('/reporte_transferencias',        [ReporteController::class, 'reporteTransferencias'])->name('reporte.reporte_transferencias')->middleware('can:reporte_transferencias.submenu');
     Route::get('/reporte_transferencias/pdf',    [ReporteController::class, 'reporteTransferenciasPdf'])->name('reporte.reporte_transferencias_pdf')->middleware('can:reporte_transferencias.exportar');
