@@ -540,28 +540,35 @@
     @if($vista === 'nueva')
     @php $sym = $this->moneda === 'USD' ? '$' : ($this->moneda === 'EUR' ? '€' : 'S/'); @endphp
 
-    {{-- ── Barra superior ── --}}
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <div class="d-flex align-items-center gap-2">
-            <h5 class="mb-0 fw-bold">
-                <i class="fa-solid fa-file-invoice me-2 text-primary"></i>Registro de Ingresos - Compras
-            </h5>
+    {{-- Card único: título + botones + formulario (estándar Gestión de Productos) --}}
+    <div class="card border-0 shadow-sm">
+
+        <div class="card-header bg-white border-bottom py-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fa-solid fa-file-invoice me-2 text-primary"></i>Registro de Ingresos - Compras
+                    </h5>
+                    <small class="text-muted">Registra el ingreso de mercadería por compra.</small>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button class="btn btn-warning fw-semibold" wire:click="cargarTransito">
+                        <i class="fa-solid fa-truck me-1"></i> Compras en Tránsito
+                    </button>
+                    <button class="btn btn-primary fw-semibold px-4"
+                            wire:click="guardarOrden" wire:loading.attr="disabled" wire:target="guardarOrden">
+                        <span wire:loading.remove wire:target="guardarOrden">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Registrar Compra
+                        </span>
+                        <span wire:loading wire:target="guardarOrden">
+                            <span class="spinner-border spinner-border-sm me-1"></span> Guardando...
+                        </span>
+                    </button>
+                </div>
+            </div>
         </div>
-        <div class="d-flex gap-2">
-        <button class="btn btn-warning fw-semibold" wire:click="cargarTransito">
-            <i class="fa-solid fa-truck me-1"></i> Compras en Tránsito
-        </button>
-        <button class="btn btn-primary fw-semibold px-4"
-                wire:click="guardarOrden" wire:loading.attr="disabled" wire:target="guardarOrden">
-            <span wire:loading.remove wire:target="guardarOrden">
-                <i class="fa-solid fa-floppy-disk me-1"></i> Registrar Compra
-            </span>
-            <span wire:loading wire:target="guardarOrden">
-                <span class="spinner-border spinner-border-sm me-1"></span> Guardando...
-            </span>
-        </button>
-        </div>
-    </div>
+
+        <div class="card-body">
 
     {{-- ══ BLOQUE 1 — Datos del Comprobante (ancho completo) ══ --}}
     <div class="card border-0 shadow-sm mb-3">
@@ -978,6 +985,9 @@
     </div>
         </div>
     </div>
+
+        </div>{{-- /card-body --}}
+    </div>{{-- /card único Registro de Ingresos --}}
 
     @endif
 
@@ -1524,6 +1534,7 @@
                                     <th style="width:60px;">Ítem</th>
                                     <th>Tipo de Comprobante</th>
                                     <th>Serie y Correlativo</th>
+                                    <th class="text-center" style="width:120px;">Estado</th>
                                     <th class="text-center" style="width:150px;">Acciones</th>
                                 </tr>
                             </thead>
@@ -1531,20 +1542,32 @@
                                 @forelse($comprasTransito as $i => $t)
                                     @php
                                         $tipoLbl = ['01'=>'Factura','03'=>'Boleta','07'=>'Nota de Crédito','08'=>'Nota de Débito','09'=>'Guía','12'=>'Ticket'][$t['orden_compra_tipo_doc']] ?? ($t['orden_compra_tipo_doc'] ?: '—');
+                                        $estadoInfo = [
+                                            'pendiente'   => ['bg-secondary', 'Pendiente'],
+                                            'en_transito' => ['bg-warning text-dark', 'En Tránsito'],
+                                            'recibido'    => ['bg-success', 'Recepcionado'],
+                                        ][$t['orden_compra_estado']] ?? ['bg-light text-dark border', ucfirst($t['orden_compra_estado'])];
                                     @endphp
                                     <tr wire:key="transito-{{ $t['id_orden_compra'] }}">
                                         <td>{{ $i + 1 }}</td>
                                         <td><span class="badge bg-light text-dark border">{{ $tipoLbl }}</span></td>
                                         <td class="fw-semibold">{{ $t['orden_compra_numero_doc'] ?: $t['orden_compra_numero'] }}</td>
+                                        <td class="text-center"><span class="badge {{ $estadoInfo[0] }}">{{ $estadoInfo[1] }}</span></td>
                                         <td class="text-center">
-                                            <button class="btn btn-sm btn-success" wire:click="confirmarTransito({{ $t['id_orden_compra'] }})">
-                                                <i class="fa-solid fa-box-open me-1"></i>Confirmar
-                                            </button>
+                                            @if($t['orden_compra_estado'] === 'en_transito')
+                                                <button class="btn btn-sm btn-success" wire:click="confirmarTransito({{ $t['id_orden_compra'] }})">
+                                                    <i class="fa-solid fa-box-open me-1"></i>Confirmar
+                                                </button>
+                                            @elseif($t['orden_compra_estado'] === 'recibido')
+                                                <span class="text-success small"><i class="fa-solid fa-circle-check me-1"></i>Recepcionado</span>
+                                            @else
+                                                <span class="text-muted small">—</span>
+                                            @endif
                                         </td>
                                     </tr>
                                 @empty
-                                    <tr><td colspan="4" class="text-center text-muted py-4">
-                                        <i class="fa-solid fa-inbox fa-2x d-block mb-2 opacity-50"></i>No hay compras en tránsito.
+                                    <tr><td colspan="5" class="text-center text-muted py-4">
+                                        <i class="fa-solid fa-inbox fa-2x d-block mb-2 opacity-50"></i>No hay compras registradas.
                                     </td></tr>
                                 @endforelse
                             </tbody>

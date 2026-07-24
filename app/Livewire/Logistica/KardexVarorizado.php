@@ -413,20 +413,44 @@ public function updatedUbicacionKey(): void
 
     private function calcularKardexProducto(int $idPro): array
     {
-        $qSaldo = DB::table('movimientos_productos as mp')
+        // Saldo inicial anclado al STOCK REAL (producto_sucursal), no a movimientos previos.
+        // Motivo: el stock inicial de los productos no se registró como movimiento de ingreso,
+        // así que el kardex partía de 0 y una salida dejaba saldo negativo. Se reconstruye:
+        //   saldo_inicial = stock_actual - neto(movimientos con fecha >= desde)
+        $idSucursalStock = $this->resolverIdSucursal();
+        $idEmpresaStock  = $this->resolverIdEmpresa();
+
+        $qStock = DB::table('producto_sucursal')->where('id_pro', $idPro);
+        if ($idSucursalStock > 0) {
+            $qStock->where('id_tienda', $idSucursalStock);
+        } elseif ($idEmpresaStock) {
+            $qStock->whereIn('id_tienda', function ($s) use ($idEmpresaStock) {
+                $s->from('tiendas')->where('id_empresa', $idEmpresaStock)->select('id_tienda');
+            });
+        }
+        $stockActual = (float) $qStock->sum('ps_stock');
+
+        // Neto de movimientos desde el inicio del rango (para descontarlo del stock actual)
+        $qNet = DB::table('movimientos_productos as mp')
             ->join('movimientos_productos_detalle as mpd', 'mpd.id_movimientos_productos', '=', 'mp.id_movimientos_productos')
             ->where('mpd.id_pro', $idPro)
             ->where('mp.movimientos_productos_estado', 1)
-            ->where('mp.movimientos_productos_fecha', '<', $this->desde);
-        $this->aplicarFiltroUbicacion($qSaldo);
-        $saldo = $qSaldo->selectRaw('
+            ->where('mp.movimientos_productos_fecha', '>=', $this->desde);
+        $this->aplicarFiltroUbicacion($qNet);
+        $net = $qNet->selectRaw('
             SUM(CASE WHEN mp.movimientos_productos_tipo = 1 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END)
-          - SUM(CASE WHEN mp.movimientos_productos_tipo = 2 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END) as saldo_cantidad,
-            SUM(CASE WHEN mp.movimientos_productos_tipo = 1 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) * mpd.costo_unitario ELSE 0 END)
-          - SUM(CASE WHEN mp.movimientos_productos_tipo = 2 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) * mpd.costo_unitario ELSE 0 END) as saldo_valor
+          - SUM(CASE WHEN mp.movimientos_productos_tipo = 2 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END) as net_cant
         ')->first();
-        $saldoCantidad = (float) ($saldo->saldo_cantidad ?? 0);
-        $saldoValor    = (float) ($saldo->saldo_valor    ?? 0);
+        $netCant = (float) ($net->net_cant ?? 0);
+
+        $costoRef = (float) (DB::table('productos')->where('id_pro', $idPro)->value('pro_costo_total') ?? 0);
+
+        $saldoIniCant = round($stockActual - $netCant, 4);
+        $saldoIniValor = round($saldoIniCant * $costoRef, 4);
+
+        $saldo = (object) ['saldo_cantidad' => $saldoIniCant, 'saldo_valor' => $saldoIniValor];
+        $saldoCantidad = $saldoIniCant;
+        $saldoValor    = $saldoIniValor;
 
         $qMov = DB::table('movimientos_productos as mp')
             ->join('movimientos_productos_detalle as mpd', 'mpd.id_movimientos_productos', '=', 'mp.id_movimientos_productos')
@@ -607,10 +631,45 @@ public function updatedUbicacionKey(): void
             ->orderBy('p.pro_nombre')
             ->get();
 
+            // Saldo inicial anclado al STOCK REAL (por lote), no a movimientos previos.
+            $idsPro = $resultados->pluck('id_pro')->all();
+            $idSucursalStock = $this->resolverIdSucursal();
+            $idEmpresaStock  = $this->resolverIdEmpresa();
+
+            $stockMap = collect();
+            $netMap   = collect();
+            $costoMap = collect();
+            if (!empty($idsPro)) {
+                $qStock = DB::table('producto_sucursal')->whereIn('id_pro', $idsPro);
+                if ($idSucursalStock > 0) {
+                    $qStock->where('id_tienda', $idSucursalStock);
+                } elseif ($idEmpresaStock) {
+                    $qStock->whereIn('id_tienda', function ($s) use ($idEmpresaStock) {
+                        $s->from('tiendas')->where('id_empresa', $idEmpresaStock)->select('id_tienda');
+                    });
+                }
+                $stockMap = $qStock->groupBy('id_pro')
+                    ->selectRaw('id_pro, SUM(ps_stock) as stock')->pluck('stock', 'id_pro');
+
+                $qNet = DB::table('movimientos_productos as mp')
+                    ->join('movimientos_productos_detalle as mpd', 'mpd.id_movimientos_productos', '=', 'mp.id_movimientos_productos')
+                    ->whereIn('mpd.id_pro', $idsPro)
+                    ->where('mp.movimientos_productos_estado', 1)
+                    ->where('mp.movimientos_productos_fecha', '>=', $this->desde);
+                $this->aplicarFiltroUbicacion($qNet);
+                $netMap = $qNet->groupBy('mpd.id_pro')->selectRaw('
+                    mpd.id_pro,
+                    SUM(CASE WHEN mp.movimientos_productos_tipo = 1 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END)
+                  - SUM(CASE WHEN mp.movimientos_productos_tipo = 2 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END) as net_cant
+                ')->pluck('net_cant', 'id_pro');
+
+                $costoMap = DB::table('productos')->whereIn('id_pro', $idsPro)->pluck('pro_costo_total', 'id_pro');
+            }
+
             $grupos = [];
             foreach ($resultados as $r) {
-                $saldoIniCant  = (float) $r->saldo_ini_cant;
-                $saldoIniValor = (float) $r->saldo_ini_valor;
+                $saldoIniCant  = round((float) ($stockMap[$r->id_pro] ?? 0) - (float) ($netMap[$r->id_pro] ?? 0), 4);
+                $saldoIniValor = round($saldoIniCant * (float) ($costoMap[$r->id_pro] ?? 0), 4);
                 $ingresosCant  = (float) $r->ingresos_cant;
                 $ingresosValor = (float) $r->ingresos_valor;
                 $egresosCant   = (float) $r->egresos_cant;

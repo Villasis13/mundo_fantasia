@@ -3096,24 +3096,37 @@ class LogisticaController extends Controller
     {
         $DB = \Illuminate\Support\Facades\DB::class;
 
-        $qSaldo = \Illuminate\Support\Facades\DB::table("movimientos_productos as mp")
+        // Saldo inicial anclado al STOCK REAL (producto_sucursal), no a movimientos previos.
+        //   saldo_inicial = stock_actual - neto(movimientos con fecha >= desde)
+        $qStock = \Illuminate\Support\Facades\DB::table("producto_sucursal")->where("id_pro", $idPro);
+        if ($idSucursal > 0) {
+            $qStock->where("id_tienda", $idSucursal);
+        } elseif ($idEmpresa) {
+            $qStock->whereIn("id_tienda", function ($s) use ($idEmpresa) {
+                $s->from("tiendas")->where("id_empresa", $idEmpresa)->select("id_tienda");
+            });
+        }
+        $stockActual = (float) $qStock->sum("ps_stock");
+
+        $qNet = \Illuminate\Support\Facades\DB::table("movimientos_productos as mp")
             ->join("movimientos_productos_detalle as mpd", "mpd.id_movimientos_productos", "=", "mp.id_movimientos_productos")
             ->where("mpd.id_pro", $idPro)
             ->where("mp.movimientos_productos_estado", 1);
-        if ($desde) $qSaldo->where("mp.movimientos_productos_fecha", "<", $desde);
+        if ($desde) $qNet->where("mp.movimientos_productos_fecha", ">=", $desde);
         if ($idSucursal > 0) {
-            $qSaldo->where("mp.id_sucursal", $idSucursal);
+            $qNet->where("mp.id_sucursal", $idSucursal);
         } elseif ($idEmpresa) {
-            $qSaldo->join("sucursals as s0", "s0.id_sucursal", "=", "mp.id_sucursal")->where("s0.id_empresa", $idEmpresa);
+            $qNet->join("sucursals as s0", "s0.id_sucursal", "=", "mp.id_sucursal")->where("s0.id_empresa", $idEmpresa);
         }
-        $saldoRow = $qSaldo->selectRaw("
+        $netRow = $qNet->selectRaw("
             SUM(CASE WHEN mp.movimientos_productos_tipo=1 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END)
-          - SUM(CASE WHEN mp.movimientos_productos_tipo=2 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END) as saldo_cantidad,
-            SUM(CASE WHEN mp.movimientos_productos_tipo=1 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) * mpd.costo_unitario ELSE 0 END)
-          - SUM(CASE WHEN mp.movimientos_productos_tipo=2 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) * mpd.costo_unitario ELSE 0 END) as saldo_valor
+          - SUM(CASE WHEN mp.movimientos_productos_tipo=2 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END) as net_cant
         ")->first();
-        $saldoCant  = (float)($saldoRow->saldo_cantidad ?? 0);
-        $saldoValor = (float)($saldoRow->saldo_valor    ?? 0);
+        $netCant  = (float) ($netRow->net_cant ?? 0);
+        $costoRef = (float) (\Illuminate\Support\Facades\DB::table("productos")->where("id_pro", $idPro)->value("pro_costo_total") ?? 0);
+
+        $saldoCant  = round($stockActual - $netCant, 4);
+        $saldoValor = round($saldoCant * $costoRef, 4);
         $saldoInicial = ["cantidad" => $saldoCant, "valor" => $saldoValor];
 
         $qMov = \Illuminate\Support\Facades\DB::table("movimientos_productos as mp")
@@ -3243,10 +3256,45 @@ class LogisticaController extends Controller
         ->orderBy('p.pro_nombre')
         ->get();
 
+        // Saldo inicial anclado al STOCK REAL (por lote): saldo_ini = stock_actual - neto(fecha >= desde)
+        $idsPro = $resultados->pluck('id_pro')->all();
+        $stockMap = collect(); $netMap = collect(); $costoMap = collect();
+        if (!empty($idsPro)) {
+            $qStock = \Illuminate\Support\Facades\DB::table('producto_sucursal')->whereIn('id_pro', $idsPro);
+            if ($idSucursal > 0) {
+                $qStock->where('id_tienda', $idSucursal);
+            } elseif ($idEmpresa > 0) {
+                $qStock->whereIn('id_tienda', function ($s) use ($idEmpresa) {
+                    $s->from('tiendas')->where('id_empresa', $idEmpresa)->select('id_tienda');
+                });
+            }
+            $stockMap = $qStock->groupBy('id_pro')->selectRaw('id_pro, SUM(ps_stock) as stock')->pluck('stock', 'id_pro');
+
+            $qNet = \Illuminate\Support\Facades\DB::table('movimientos_productos as mp')
+                ->join('movimientos_productos_detalle as mpd', 'mpd.id_movimientos_productos', '=', 'mp.id_movimientos_productos')
+                ->whereIn('mpd.id_pro', $idsPro)
+                ->where('mp.movimientos_productos_estado', 1);
+            if ($desde) $qNet->where('mp.movimientos_productos_fecha', '>=', $desde);
+            if ($idAlmacen > 0) {
+                $qNet->where('mp.id_almacen', $idAlmacen);
+            } elseif ($idSucursal > 0) {
+                $qNet->where('mp.id_sucursal', $idSucursal);
+            } elseif ($idEmpresa > 0) {
+                $qNet->join('sucursals as s_net', 's_net.id_sucursal', '=', 'mp.id_sucursal')->where('s_net.id_empresa', $idEmpresa);
+            }
+            $netMap = $qNet->groupBy('mpd.id_pro')->selectRaw('
+                mpd.id_pro,
+                SUM(CASE WHEN mp.movimientos_productos_tipo = 1 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END)
+              - SUM(CASE WHEN mp.movimientos_productos_tipo = 2 THEN CAST(mpd.movimientos_productos_detalle_cantidad AS DECIMAL(14,4)) ELSE 0 END) as net_cant
+            ')->pluck('net_cant', 'id_pro');
+
+            $costoMap = \Illuminate\Support\Facades\DB::table('productos')->whereIn('id_pro', $idsPro)->pluck('pro_costo_total', 'id_pro');
+        }
+
         $grupos = [];
         foreach ($resultados as $r) {
-            $saldoIniCant  = (float) $r->saldo_ini_cant;
-            $saldoIniValor = (float) $r->saldo_ini_valor;
+            $saldoIniCant  = round((float) ($stockMap[$r->id_pro] ?? 0) - (float) ($netMap[$r->id_pro] ?? 0), 4);
+            $saldoIniValor = round($saldoIniCant * (float) ($costoMap[$r->id_pro] ?? 0), 4);
             $ingresosCant  = (float) $r->ingresos_cant;
             $ingresosValor = (float) $r->ingresos_valor;
             $egresosCant   = (float) $r->egresos_cant;

@@ -4175,6 +4175,223 @@ class ReporteController extends Controller
         }
     }
 
+    // ══════════════════════════════════════════════════════════
+    //  INVENTARIO PERMANENTE
+    // ══════════════════════════════════════════════════════════
+    public function inventarioPermanente()
+    {
+        try {
+            $opciones = $this->submenu->optiones_por_vista('inventario_permanente');
+            return view('reporte.inventario_permanente', compact('opciones'));
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+            echo "<script>alert('Error al mostrar contenido.');window.location.href='" . route('admin') . "';</script>";
+        }
+    }
+
+    // Resuelve el rango de fechas y su etiqueta según el modo (fecha | periodo)
+    private function rangoInventarioPermanente(Request $request): array
+    {
+        return (new \App\Service\InventarioPermanenteService())->rango($request->all());
+    }
+
+    private function etiquetasInventarioPermanente(Request $request): array
+    {
+        $tipoMap = ['detallado_diario' => 'Detallado diario', 'acumulado_dia' => 'Acumulado por día'];
+        $valMap  = ['valorizado' => 'Valorizado', 'unidades' => 'Unidades físicas'];
+        $exMap   = [
+            'todos'                     => 'Todos',
+            'con_saldo'                 => 'Solo C/Saldo',
+            'sin_movimientos'           => 'Solo S/Movimientos',
+            'con_saldo_con_movimientos' => 'Solo C/Saldos y C/Movimientos',
+        ];
+        return [
+            'tipo'        => $tipoMap[$request->get('tipo')] ?? 'Detallado diario',
+            'valorizado'  => $valMap[$request->get('valorizado')] ?? 'Valorizado',
+            'existencias' => $exMap[$request->get('existencias')] ?? 'Todos',
+        ];
+    }
+
+    /**
+     * Construye las filas del kardex (inventario permanente) según los filtros.
+     * Devuelve filas planas con: fecha, codigo, producto, motivo, ent_cant, sal_cant,
+     * costo_uni, ent_val, sal_val, saldo_cant, saldo_val.
+     * Para "acumulado_dia" se agrupa por producto + fecha.
+     */
+    private function datosInventarioPermanente(Request $request): array
+    {
+        return (new \App\Service\InventarioPermanenteService())->filas($request->all());
+    }
+
+    public function inventarioPermanenteExcel(Request $request)
+    {
+        try {
+            [$ini, $fin, $etiquetaRango] = $this->rangoInventarioPermanente($request);
+            $et       = $this->etiquetasInventarioPermanente($request);
+            $esValor  = $request->get('valorizado') !== 'unidades';
+            $empresa  = DB::table('empresa')->orderBy('id_empresa')->first();
+
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Inventario Permanente');
+
+            $titulo = 'Inventario Permanente ' . ($esValor ? 'Valorizado' : 'en Unidades Físicas');
+            $sheet->mergeCells('A1:J1');
+            $sheet->setCellValue('A1', $titulo);
+            $sheet->getStyle('A1')->applyFromArray([
+                'font'      => ['bold' => true, 'size' => 14, 'color' => ['rgb' => '0204E6']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+
+            $azul = ['font' => ['bold' => true, 'color' => ['rgb' => '0204E6']]];
+            $sheet->setCellValue('A2', $empresa->empresa_razon_social ?? '');
+            $sheet->setCellValue('A3', $empresa->empresa_domiciliofiscal ?? '');
+            $sheet->setCellValue('A4', 'RUC N° ' . ($empresa->empresa_ruc ?? ''));
+            $sheet->getStyle('A2:A4')->applyFromArray($azul);
+            $sheet->setCellValue('A5', $etiquetaRango);
+            $sheet->setCellValue('A6', 'Tipo: ' . $et['tipo'] . '  |  Modo: ' . $et['valorizado'] . '  |  Existencias: ' . $et['existencias']);
+
+            $acumulado = $request->get('tipo') === 'acumulado_dia';
+
+            // Cabeceras según tipo/modo
+            if ($acumulado) {
+                $headers = $esValor
+                    ? ['Fecha', 'Código', 'Producto', 'Valor Entradas', 'Valor Salidas', 'Saldo Unidades', 'Saldo Valorizado']
+                    : ['Fecha', 'Código', 'Producto', 'Total Entradas', 'Total Salidas', 'Saldo Final'];
+            } else {
+                $headers = $esValor
+                    ? ['Fecha', 'Código', 'Producto', 'Documento / Motivo', 'Entrada Cant.', 'Salida Cant.', 'Costo Unit.', 'Valor Entrada', 'Valor Salida', 'Saldo Unidades', 'Saldo Valorizado']
+                    : ['Fecha', 'Código', 'Producto', 'Documento / Motivo', 'Entrada Cant.', 'Salida Cant.', 'Saldo'];
+            }
+            $headRow = 8;
+            $lastCol = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex(count($headers));
+            $sheet->fromArray($headers, null, "A{$headRow}");
+            $sheet->getStyle("A{$headRow}:{$lastCol}{$headRow}")->applyFromArray([
+                'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '0204E6']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+                'borders'   => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+            ]);
+
+            // Filas de datos
+            $filas = $this->datosInventarioPermanente($request);
+            $r = $headRow + 1;
+            foreach ($filas as $f) {
+                $fecha = $f['fecha'] ? date('d/m/Y', strtotime($f['fecha'])) : '—';
+                if ($acumulado) {
+                    $fila = $esValor
+                        ? [$fecha, $f['codigo'], $f['producto'], round($f['ent_val'], 2), round($f['sal_val'], 2), round($f['saldo_cant'], 2), round($f['saldo_val'], 2)]
+                        : [$fecha, $f['codigo'], $f['producto'], round($f['ent_cant'], 2), round($f['sal_cant'], 2), round($f['saldo_cant'], 2)];
+                } else {
+                    $fila = $esValor
+                        ? [$fecha, $f['codigo'], $f['producto'], $f['motivo'], round($f['ent_cant'], 2), round($f['sal_cant'], 2), round($f['costo_uni'], 4), round($f['ent_val'], 2), round($f['sal_val'], 2), round($f['saldo_cant'], 2), round($f['saldo_val'], 2)]
+                        : [$fecha, $f['codigo'], $f['producto'], $f['motivo'], round($f['ent_cant'], 2), round($f['sal_cant'], 2), round($f['saldo_cant'], 2)];
+                }
+                $col = 'A';
+                foreach ($fila as $val) {
+                    if ($col === 'B') $sheet->setCellValueExplicit("B{$r}", (string) $val, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    else              $sheet->setCellValue("{$col}{$r}", $val);
+                    $col++;
+                }
+                $sheet->getStyle("A{$r}:{$lastCol}{$r}")->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'D0D0D0']]]]);
+                $r++;
+            }
+            if (empty($filas)) {
+                $sheet->mergeCells("A{$r}:{$lastCol}{$r}");
+                $sheet->setCellValue("A{$r}", 'Sin registros para los filtros seleccionados.');
+                $sheet->getStyle("A{$r}")->applyFromArray(['font' => ['italic' => true], 'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER]]);
+            }
+
+            foreach (range('A', $lastCol) as $col) $sheet->getColumnDimension($col)->setAutoSize(true);
+
+            $nombreArchivo = 'inventario_permanente_' . now()->format('Ymd_His') . '.xlsx';
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header("Content-Disposition: attachment; filename=\"{$nombreArchivo}\"");
+            header('Cache-Control: max-age=0');
+            (new Xlsx($spreadsheet))->save('php://output');
+            exit;
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+        }
+    }
+
+    public function inventarioPermanentePdf(Request $request)
+    {
+        try {
+            [$ini, $fin, $etiquetaRango] = $this->rangoInventarioPermanente($request);
+            $et      = $this->etiquetasInventarioPermanente($request);
+            $esValor = $request->get('valorizado') !== 'unidades';
+            $empresa = DB::table('empresa')->orderBy('id_empresa')->first();
+
+            $pdf = new PDFBufeo('L', 'mm', 'A4');
+            $pdf->AddPage();
+
+            $pdf->SetFont('Arial', 'B', 13);
+            $pdf->Cell(0, 8, utf8_decode('Inventario Permanente ' . ($esValor ? 'Valorizado' : 'en Unidades Físicas')), 0, 1, 'C');
+            $pdf->SetFont('Arial', 'B', 9);
+            $pdf->Cell(0, 5, utf8_decode($empresa->empresa_razon_social ?? ''), 0, 1, 'C');
+            $pdf->SetFont('Arial', '', 8);
+            $pdf->Cell(0, 5, utf8_decode('RUC N° ' . ($empresa->empresa_ruc ?? '')), 0, 1, 'C');
+            $pdf->Cell(0, 5, utf8_decode($etiquetaRango), 0, 1, 'C');
+            $pdf->Cell(0, 5, utf8_decode('Tipo: ' . $et['tipo'] . '  |  Modo: ' . $et['valorizado'] . '  |  Existencias: ' . $et['existencias']), 0, 1, 'C');
+            $pdf->Ln(2);
+
+            $acumulado = $request->get('tipo') === 'acumulado_dia';
+
+            // Definición de columnas [etiqueta, ancho, clave, alineación]
+            if ($acumulado) {
+                $cols = $esValor
+                    ? [['Fecha',24,'fecha','C'],['Código',26,'codigo','L'],['Producto',85,'producto','L'],['Valor Entradas',35,'ent_val','R'],['Valor Salidas',35,'sal_val','R'],['Saldo Und.',30,'saldo_cant','R'],['Saldo Valor.',35,'saldo_val','R']]
+                    : [['Fecha',30,'fecha','C'],['Código',32,'codigo','L'],['Producto',110,'producto','L'],['Total Entradas',35,'ent_cant','R'],['Total Salidas',35,'sal_cant','R'],['Saldo Final',35,'saldo_cant','R']];
+            } else {
+                $cols = $esValor
+                    ? [['Fecha',20,'fecha','C'],['Código',22,'codigo','L'],['Producto',55,'producto','L'],['Doc./Motivo',40,'motivo','L'],['Ent.',18,'ent_cant','R'],['Sal.',18,'sal_cant','R'],['C.Unit.',20,'costo_uni','R'],['V.Ent.',22,'ent_val','R'],['V.Sal.',22,'sal_val','R'],['Saldo Und.',20,'saldo_cant','R'],['Saldo Val.',22,'saldo_val','R']]
+                    : [['Fecha',26,'fecha','C'],['Código',30,'codigo','L'],['Producto',90,'producto','L'],['Documento / Motivo',60,'motivo','L'],['Entrada',25,'ent_cant','R'],['Salida',25,'sal_cant','R'],['Saldo',25,'saldo_cant','R']];
+            }
+
+            $pintarCabecera = function () use ($pdf, $cols) {
+                $pdf->SetFont('Arial', 'B', 7);
+                $pdf->SetFillColor(2, 4, 230);
+                $pdf->SetTextColor(255, 255, 255);
+                foreach ($cols as $c) $pdf->Cell($c[1], 7, utf8_decode($c[0]), 1, 0, 'C', true);
+                $pdf->Ln();
+                $pdf->SetTextColor(0, 0, 0);
+            };
+            $pintarCabecera();
+
+            $filas = $this->datosInventarioPermanente($request);
+            $pdf->SetFont('Arial', '', 7);
+
+            if (empty($filas)) {
+                $totalW = array_sum(array_column($cols, 1));
+                $pdf->SetFont('Arial', 'I', 8);
+                $pdf->Cell($totalW, 7, utf8_decode('Sin registros para los filtros seleccionados.'), 1, 1, 'C');
+            } else {
+                foreach ($filas as $f) {
+                    if ($pdf->GetY() > 185) { $pdf->AddPage(); $pintarCabecera(); $pdf->SetFont('Arial', '', 7); }
+                    foreach ($cols as $c) {
+                        $key = $c[2];
+                        if ($key === 'fecha') {
+                            $txt = $f['fecha'] ? date('d/m/Y', strtotime($f['fecha'])) : '—';
+                        } elseif (in_array($key, ['codigo', 'producto', 'motivo'])) {
+                            $txt = mb_substr((string) ($f[$key] ?? ''), 0, (int) floor($c[1] / 1.8));
+                        } else {
+                            $dec = $key === 'costo_uni' ? 4 : 2;
+                            $txt = number_format((float) $f[$key], $dec);
+                        }
+                        $pdf->Cell($c[1], 6, utf8_decode($txt), 1, 0, $c[3]);
+                    }
+                    $pdf->Ln();
+                }
+            }
+
+            $pdf->Output('I', 'inventario_permanente_' . now()->format('Ymd_His') . '.pdf');
+            exit;
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+        }
+    }
+
     private function obtenerDatosReporteCompras(Request $request): array
     {
         $idEmpresa  = (int) ($request->empresa  ?? 0);

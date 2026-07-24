@@ -729,6 +729,7 @@ class Compras extends Component
             DB::commit();
             $this->limpiarFormulario();
             $this->vista = 'nueva';
+            $this->dispatch('compraRegistrada');
             session()->flash('success', $this->estadoOrden === 'recibido'
                 ? "Compra {$numero} registrada y recepcionada. El stock de cada producto fue actualizado."
                 : "Compra {$numero} registrada. Recepcione cuando llegue la mercadería.");
@@ -770,6 +771,7 @@ class Compras extends Component
 
         $this->idEnviar = null;
         $this->dispatch('cerrarModalEnviar');
+        $this->dispatch('compraRegistrada');
         session()->flash('success', 'Orden marcada como en tránsito.');
     }
 
@@ -780,11 +782,12 @@ class Compras extends Component
     public function cargarTransito(): void
     {
         $this->comprasTransito = DB::table('orden_compra')
-            ->where('orden_compra_estado', 'en_transito')
+            ->whereIn('orden_compra_estado', ['pendiente', 'en_transito'])
+            ->orderByRaw("FIELD(orden_compra_estado, 'en_transito', 'pendiente')")
             ->orderByDesc('id_orden_compra')
             ->get([
                 'id_orden_compra', 'orden_compra_numero', 'orden_compra_tipo_doc',
-                'orden_compra_numero_doc', 'orden_compra_nom_prove',
+                'orden_compra_numero_doc', 'orden_compra_nom_prove', 'orden_compra_estado',
             ])->map(fn($o) => (array) $o)->toArray();
 
         $this->dispatch('abrirModalTransito');
@@ -914,6 +917,7 @@ class Compras extends Component
 
         $this->transitoId = null;
         $this->dispatch('cerrarModalConfirmarTransito');
+        $this->dispatch('compraRegistrada');
         $this->cargarTransito();
     }
 
@@ -1104,6 +1108,7 @@ class Compras extends Component
             $this->detallesRecibir     = [];
             $this->cantidadesRecibidas = [];
             $this->dispatch('cerrarModalRecibir');
+            $this->dispatch('compraRegistrada');
             session()->flash('success', 'Compra recepcionada. Stock actualizado en sede.' . $mermaMsg);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -1210,6 +1215,7 @@ class Compras extends Component
             $this->idAnular        = null;
             $this->motivoAnulacion = '';
             $this->dispatch('cerrarModalAnular');
+            $this->dispatch('compraRegistrada');
             session()->flash('success', 'Orden anulada correctamente.');
         } catch (\Exception $e) {
             DB::rollBack();
