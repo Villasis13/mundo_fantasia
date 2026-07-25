@@ -208,6 +208,15 @@ public function updatedUbicacionKey(): void
 
     private function cargarEmpresas(): void {} // carga real en render()
 
+    // Devuelve el texto BOLETA / FACTURA a partir del código (01/03) o del texto guardado.
+    private static function tdocTexto(?string $valor): string
+    {
+        $v = strtoupper(trim((string) $valor));
+        if ($v === '01' || str_contains($v, 'FACTURA')) return 'FACTURA';
+        if ($v === '03' || str_contains($v, 'BOLETA') || str_contains($v, 'VOLETA')) return 'BOLETA';
+        return $v !== '' ? $v : '00';
+    }
+
     private static function tdocSunat(?string $tipoRef): string
     {
         return match(strtolower((string) $tipoRef)) {
@@ -475,12 +484,47 @@ public function updatedUbicacionKey(): void
             ->orderBy('mp.id_movimientos_productos')
             ->get();
 
+        // Comprobante de compra (serie/número desde orden_compra_numero_doc + proveedor)
+        $compraIds = $movimientos->where('tipo_referencia', 'compra')->pluck('id_referencia')->filter()->unique()->all();
+        $compraDocs = empty($compraIds) ? collect()
+            : DB::table('orden_compra')->whereIn('id_orden_compra', $compraIds)
+                ->get(['id_orden_compra', 'orden_compra_numero_doc', 'orden_compra_tipo_doc', 'orden_compra_nom_prove', 'orden_compra_num_document'])
+                ->keyBy('id_orden_compra');
+
+        // Comprobante de venta (serie/correlativo + cliente)
+        $ventaIds = $movimientos->where('tipo_referencia', 'venta')->pluck('id_referencia')->filter()->unique()->all();
+        $ventaDocs = empty($ventaIds) ? collect()
+            : DB::table('ventas as v')->leftJoin('clientes as c', 'c.id_clientes', '=', 'v.id_clientes')
+                ->whereIn('v.id_venta', $ventaIds)
+                ->get(['v.id_venta', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_tipo', 'c.cliente_razonsocial', 'c.cliente_numero'])
+                ->keyBy('id_venta');
+
         $totalEntradaCant = $totalEntradaValor = $totalSalidaCant = $totalSalidaValor = 0.0;
         $lineas = [];
         foreach ($movimientos as $mov) {
             $cantidad   = (float) $mov->cantidad;
             $costoUnit  = (float) $mov->costo_unitario;
             $costoTotal = $cantidad * $costoUnit;
+
+            // Serie / Número, Cliente/Proveedor y T/DOC (BOLETA/FACTURA) según el tipo de movimiento
+            $serie = ''; $numero = (string) ($mov->id_referencia ?? $mov->id_movimientos_productos);
+            $clienteProveedor = '';
+            $tdoc = self::tdocSunat($mov->tipo_referencia);
+            if ($mov->tipo_referencia === 'compra' && isset($compraDocs[$mov->id_referencia])) {
+                $oc = $compraDocs[$mov->id_referencia];
+                $doc = trim((string) ($oc->orden_compra_numero_doc ?? ''));
+                if (str_contains($doc, '-')) { [$serie, $numero] = explode('-', $doc, 2); }
+                elseif ($doc !== '')         { $numero = $doc; }
+                $clienteProveedor = trim(($oc->orden_compra_nom_prove ?? '') . (($oc->orden_compra_num_document ?? '') !== '' ? ' - ' . $oc->orden_compra_num_document : ''), ' -');
+                $tdoc = self::tdocTexto($oc->orden_compra_tipo_doc ?? '');
+            } elseif ($mov->tipo_referencia === 'venta' && isset($ventaDocs[$mov->id_referencia])) {
+                $v = $ventaDocs[$mov->id_referencia];
+                $serie  = (string) ($v->venta_serie ?? '');
+                $numero = (string) ($v->venta_correlativo ?? $numero);
+                $clienteProveedor = trim(($v->cliente_razonsocial ?? '') . (($v->cliente_numero ?? '') !== '' ? ' - ' . $v->cliente_numero : ''), ' -');
+                $tdoc = self::tdocTexto($v->venta_tipo ?? '');
+            }
+
             $base = [
                 'fecha'           => $mov->fecha,
                 'id_movimiento'   => $mov->id_movimientos_productos,
@@ -489,7 +533,11 @@ public function updatedUbicacionKey(): void
                 'concepto'        => $mov->concepto,
                 'id_referencia'   => $mov->id_referencia,
                 'tipo_referencia' => $mov->tipo_referencia,
-                'tdoc'            => self::tdocSunat($mov->tipo_referencia),
+                'serie'            => $serie,
+                'numero'           => $numero,
+                'detalle'          => $mov->motivo,
+                'cliente_proveedor'=> $clienteProveedor,
+                'tdoc'             => $tdoc,
                 'tipo_op'         => self::tipoOpSunat($mov->tipo_referencia),
                 'usuario'         => $mov->usuario,
             ];

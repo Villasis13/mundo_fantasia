@@ -360,7 +360,7 @@
                             <table class="table table-sm table-bordered mb-0" style="font-size:0.73rem;">
                                 <thead>
                                     <tr style="background:#1e3a5f;color:white;" class="text-center">
-                                        <th colspan="5" class="text-white py-1">DOCUMENTO DE TRASLADO, COMPROBANTE DE PAGO, DOCUMENTO INTERNO O SIMILAR</th>
+                                        <th colspan="6" class="text-white py-1">DOCUMENTO DE TRASLADO, COMPROBANTE DE PAGO, DOCUMENTO INTERNO O SIMILAR</th>
                                         <th rowspan="2" class="align-middle text-white" style="width:80px;">TIPO OPERACIÓN</th>
                                         <th rowspan="2" class="align-middle text-white" style="width:65px;">ENTRADAS</th>
                                         <th rowspan="2" class="align-middle text-white" style="width:65px;">SALIDAS</th>
@@ -371,6 +371,7 @@
                                         <th class="text-white" style="width:80px;">T/DOC</th>
                                         <th class="text-white" style="width:50px;">SERIE</th>
                                         <th class="text-white" style="width:70px;">NÚMERO</th>
+                                        <th class="text-white">DETALLE</th>
                                         <th class="text-white">CLIENTE Y/O PROVEEDOR</th>
                                     </tr>
                                 </thead>
@@ -378,7 +379,7 @@
                                     @if($kpSI)
                                     <tr style="background:#f0f4ff;font-weight:600;">
                                         <td class="text-center text-muted">—</td>
-                                        <td colspan="4" class="text-center text-muted" style="font-size:0.72rem;">SALDO INICIAL AL {{ \Carbon\Carbon::parse($desde)->format('d/m/Y') }}</td>
+                                        <td colspan="5" class="text-center text-muted" style="font-size:0.72rem;">SALDO INICIAL AL {{ \Carbon\Carbon::parse($desde)->format('d/m/Y') }}</td>
                                         <td class="text-center text-muted">—</td>
                                         <td class="text-end text-muted">—</td>
                                         <td class="text-end text-muted">—</td>
@@ -389,20 +390,21 @@
                                     <tr class="{{ $i % 2 === 0 ? '' : 'table-light' }}">
                                         <td class="text-center">{{ \Carbon\Carbon::parse($ln['fecha'])->format('d/m/Y') }}</td>
                                         <td class="text-center" style="font-size:0.7rem;">{{ $ln['tdoc'] ?? '00' }}</td>
-                                        <td class="text-center text-muted">—</td>
-                                        <td class="text-center">{{ $ln['id_referencia'] ?? $ln['id_movimiento'] }}</td>
-                                        <td class="text-truncate" style="max-width:180px;" title="{{ $ln['motivo'] ?? '' }}">{{ $ln['motivo'] ?? '—' }}</td>
+                                        <td class="text-center">{{ ($ln['serie'] ?? '') !== '' ? $ln['serie'] : '—' }}</td>
+                                        <td class="text-center">{{ $ln['numero'] ?? ($ln['id_referencia'] ?? $ln['id_movimiento']) }}</td>
+                                        <td class="text-truncate" style="max-width:170px;" title="{{ $ln['detalle'] ?? '' }}">{{ $ln['detalle'] ?? '—' }}</td>
+                                        <td class="text-truncate" style="max-width:170px;" title="{{ $ln['cliente_proveedor'] ?? '' }}">{{ ($ln['cliente_proveedor'] ?? '') !== '' ? $ln['cliente_proveedor'] : '—' }}</td>
                                         <td class="text-center" style="font-size:0.7rem;">{{ $ln['tipo_op'] ?? '99' }}</td>
                                         <td class="text-end" style="color:#1a6b35;">{{ $ln['entrada_cant'] !== null ? number_format($ln['entrada_cant'], 2) : '—' }}</td>
                                         <td class="text-end" style="color:#c0392b;">{{ $ln['salida_cant'] !== null ? number_format($ln['salida_cant'], 2) : '—' }}</td>
                                         <td class="text-end fw-bold text-primary">{{ number_format($ln['saldo_cant'], 2) }}</td>
                                     </tr>
                                     @empty
-                                    <tr><td colspan="9" class="text-center text-muted py-2">Sin movimientos en el período.</td></tr>
+                                    <tr><td colspan="10" class="text-center text-muted py-2">Sin movimientos en el período.</td></tr>
                                     @endforelse
                                     @if($kpTot && count($kpLn) > 0)
                                     <tr style="background:#1e3a5f;color:#fff;font-weight:700;font-size:0.78rem;">
-                                        <td colspan="6" class="text-end pe-3">TOTALES DEL PERÍODO</td>
+                                        <td colspan="7" class="text-end pe-3">TOTALES DEL PERÍODO</td>
                                         <td class="text-end" style="color:#7effa7;">{{ number_format($kpTot['entrada_cant'], 2) }}</td>
                                         <td class="text-end" style="color:#ffaaaa;">{{ number_format($kpTot['salida_cant'], 2) }}</td>
                                         <td class="text-end" style="color:#aad4ff;">{{ number_format($kpTot['saldo_cant'], 2) }}</td>
@@ -455,8 +457,8 @@
                                     <tr class="{{ $i % 2 === 0 ? '' : 'table-light' }}">
                                         <td class="text-center">{{ \Carbon\Carbon::parse($ln['fecha'])->format('d/m/Y') }}</td>
                                         <td class="text-center" style="font-size:0.68rem;">{{ $ln['tdoc'] ?? '00' }}</td>
-                                        <td class="text-center text-muted">—</td>
-                                        <td class="text-center">{{ $ln['id_referencia'] ?? $ln['id_movimiento'] }}</td>
+                                        <td class="text-center">{{ ($ln['serie'] ?? '') !== '' ? $ln['serie'] : '—' }}</td>
+                                        <td class="text-center">{{ $ln['numero'] ?? ($ln['id_referencia'] ?? $ln['id_movimiento']) }}</td>
                                         <td class="text-center" style="font-size:0.68rem;">{{ $ln['tipo_op'] ?? '99' }}</td>
                                         <td class="text-end" style="color:#1a6b35;">{{ $ln['entrada_cant'] !== null ? number_format($ln['entrada_cant'], 2) : '—' }}</td>
                                         <td class="text-end" style="color:#1a6b35;">{{ $ln['entrada_cu'] !== null ? number_format($ln['entrada_cu'], 4) : '—' }}</td>
@@ -548,7 +550,7 @@
                             <table class="table table-sm table-bordered mb-0" style="font-size:0.73rem;">
                                 <thead>
                                     <tr style="background:#1e3a5f;color:white;" class="text-center">
-                                        <th colspan="5" class="text-white py-1">DOCUMENTO DE TRASLADO, COMPROBANTE DE PAGO, DOCUMENTO INTERNO O SIMILAR</th>
+                                        <th colspan="6" class="text-white py-1">DOCUMENTO DE TRASLADO, COMPROBANTE DE PAGO, DOCUMENTO INTERNO O SIMILAR</th>
                                         <th rowspan="2" class="align-middle text-white" style="width:80px;">TIPO OPERACIÓN <span style="font-size:0.6rem;opacity:0.8;">(TAB 12)</span></th>
                                         <th rowspan="2" class="align-middle text-white" style="width:65px;">ENTRADAS</th>
                                         <th rowspan="2" class="align-middle text-white" style="width:65px;">SALIDAS</th>
@@ -559,6 +561,7 @@
                                         <th class="text-white" style="width:80px;">T/DOC <span style="font-size:0.6rem;opacity:0.8;">(TAB 10)</span></th>
                                         <th class="text-white" style="width:50px;">SERIE</th>
                                         <th class="text-white" style="width:70px;">NÚMERO</th>
+                                        <th class="text-white">DETALLE</th>
                                         <th class="text-white">CLIENTE Y/O PROVEEDOR</th>
                                     </tr>
                                 </thead>
@@ -567,7 +570,7 @@
                                     @if($saldoInicial)
                                     <tr style="background:#f0f4ff;font-weight:600;">
                                         <td class="text-center text-muted">—</td>
-                                        <td colspan="4" class="text-center text-muted" style="font-size:0.72rem;">
+                                        <td colspan="5" class="text-center text-muted" style="font-size:0.72rem;">
                                             SALDO INICIAL AL {{ \Carbon\Carbon::parse($desde)->format('d/m/Y') }}
                                         </td>
                                         <td class="text-center text-muted">—</td>
@@ -581,10 +584,13 @@
                                     <tr class="{{ $i % 2 === 0 ? '' : 'table-light' }}">
                                         <td class="text-center">{{ \Carbon\Carbon::parse($ln['fecha'])->format('d/m/Y') }}</td>
                                         <td class="text-center" style="font-size:0.7rem;">{{ $ln['tdoc'] ?? '00' }}</td>
-                                        <td class="text-center text-muted">—</td>
-                                        <td class="text-center">{{ $ln['id_referencia'] ?? $ln['id_movimiento'] }}</td>
-                                        <td class="text-truncate" style="max-width:180px;" title="{{ $ln['motivo'] ?? '' }}">
-                                            {{ $ln['motivo'] ?? '—' }}
+                                        <td class="text-center">{{ ($ln['serie'] ?? '') !== '' ? $ln['serie'] : '—' }}</td>
+                                        <td class="text-center">{{ $ln['numero'] ?? ($ln['id_referencia'] ?? $ln['id_movimiento']) }}</td>
+                                        <td class="text-truncate" style="max-width:170px;" title="{{ $ln['detalle'] ?? '' }}">
+                                            {{ $ln['detalle'] ?? '—' }}
+                                        </td>
+                                        <td class="text-truncate" style="max-width:170px;" title="{{ $ln['cliente_proveedor'] ?? '' }}">
+                                            {{ ($ln['cliente_proveedor'] ?? '') !== '' ? $ln['cliente_proveedor'] : '—' }}
                                         </td>
                                         <td class="text-center" style="font-size:0.7rem;">{{ $ln['tipo_op'] ?? '99' }}</td>
                                         <td class="text-end" style="color:#1a6b35;">
@@ -607,7 +613,7 @@
 
                                     @if($totales && count($lineas) > 0)
                                     <tr style="background:#1e3a5f;color:#fff;font-weight:700;font-size:0.78rem;">
-                                        <td colspan="6" class="text-end pe-3">TOTALES DEL PERÍODO</td>
+                                        <td colspan="7" class="text-end pe-3">TOTALES DEL PERÍODO</td>
                                         <td class="text-end" style="color:#7effa7;">{{ number_format($totales['entrada_cant'], 2) }}</td>
                                         <td class="text-end" style="color:#ffaaaa;">{{ number_format($totales['salida_cant'], 2) }}</td>
                                         <td class="text-end" style="color:#aad4ff;">{{ number_format($totales['saldo_cant'], 2) }}</td>
@@ -723,8 +729,8 @@
                                     <tr class="{{ $i % 2 === 0 ? '' : 'table-light' }}">
                                         <td class="text-center">{{ \Carbon\Carbon::parse($ln['fecha'])->format('d/m/Y') }}</td>
                                         <td class="text-center" style="font-size:0.68rem;">{{ $ln['tdoc'] ?? '00' }}</td>
-                                        <td class="text-center text-muted">—</td>
-                                        <td class="text-center">{{ $ln['id_referencia'] ?? $ln['id_movimiento'] }}</td>
+                                        <td class="text-center">{{ ($ln['serie'] ?? '') !== '' ? $ln['serie'] : '—' }}</td>
+                                        <td class="text-center">{{ $ln['numero'] ?? ($ln['id_referencia'] ?? $ln['id_movimiento']) }}</td>
                                         <td class="text-center" style="font-size:0.68rem;">{{ $ln['tipo_op'] ?? '99' }}</td>
                                         {{-- Entradas --}}
                                         <td class="text-end" style="color:#1a6b35;">

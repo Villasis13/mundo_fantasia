@@ -2279,7 +2279,7 @@ class LogisticaController extends Controller
                 $pdf->SetY($yInfo + 2);
 
                 if ($tipoKardex === 'fisico') {
-                    [$fF,$fD,$fS,$fN,$fMo,$fO,$fE,$fSa,$fSl] = [22,22,15,25,107,25,22,22,21];
+                    [$fF,$fD,$fS,$fN,$fDet,$fMo,$fO,$fE,$fSa,$fSl] = [20,20,14,24,55,52,22,20,20,19];
                 } else {
                     [$colFecha,$colTipo,$colMotivo,$colCant,$colCU,$colTotal,$colSCant,$colSValor]
                         = [20,22,62,16,20,22,16,22];
@@ -2298,20 +2298,21 @@ class LogisticaController extends Controller
                     if ($tipoKardex === 'fisico') {
                         $pdf->SetFont("Helvetica", "B", 6);
                         $pdf->SetFillColor($nR, $nG, $nB); $pdf->SetTextColor(255,255,255);
-                        foreach ([["FECHA",$fF],[utf8_decode("T/DOC (TAB 10)"),$fD],["SERIE",$fS],[utf8_decode("NÚMERO"),$fN],[utf8_decode("CLIENTE Y/O PROVEEDOR"),$fMo],[utf8_decode("TIPO OP. (TAB 12)"),$fO],["ENTRADAS",$fE],["SALIDAS",$fSa],["SALDO FINAL",$fSl]] as [$h,$w]) { $pdf->Cell($w, 5, $h, 0, 0, "C", true); }
+                        foreach ([["FECHA",$fF],[utf8_decode("T/DOC (TAB 10)"),$fD],["SERIE",$fS],[utf8_decode("NÚMERO"),$fN],[utf8_decode("DETALLE"),$fDet],[utf8_decode("CLIENTE Y/O PROVEEDOR"),$fMo],[utf8_decode("TIPO OP. (TAB 12)"),$fO],["ENTRADAS",$fE],["SALIDAS",$fSa],["SALDO FINAL",$fSl]] as [$h,$w]) { $pdf->Cell($w, 5, $h, 0, 0, "C", true); }
                         $pdf->Ln();
                         $pdf->SetFillColor(220,228,245); $pdf->SetTextColor(30,41,59); $pdf->SetFont("Helvetica","B",6);
                         $pdf->Cell($fF,5,"-","B",0,"C",true); $pdf->Cell($fD+$fS+$fN,5,utf8_decode("SALDO INICIAL AL ".($desde?date("d/m/Y",strtotime($desde)):"")),"B",0,"C",true);
-                        $pdf->Cell($fMo,5,"","B",0,"L",true); $pdf->Cell($fO,5,"-","B",0,"C",true); $pdf->Cell($fE,5,"-","B",0,"C",true); $pdf->Cell($fSa,5,"-","B",0,"C",true);
+                        $pdf->Cell($fDet,5,"","B",0,"L",true); $pdf->Cell($fMo,5,"","B",0,"L",true); $pdf->Cell($fO,5,"-","B",0,"C",true); $pdf->Cell($fE,5,"-","B",0,"C",true); $pdf->Cell($fSa,5,"-","B",0,"C",true);
                         $pdf->Cell($fSl,5,number_format($saldoInicialP["cantidad"],2),"B",1,"R",true);
                         $pdf->SetFont("Helvetica","",6);
                         foreach ($lineasP as $idx => $ln) {
                             $pdf->CheckPageBreak(5); $fill=($idx%2===0);
                             $pdf->SetFillColor($fill?$gR:255,$fill?$gG:255,$fill?$gB:255); $pdf->SetTextColor(30,41,59);
                             $pdf->Cell($fF,5,date("d/m/Y",strtotime($ln["fecha"])),"B",0,"C",$fill);
-                            $pdf->Cell($fD,5,$ln["tdoc"]??"00","B",0,"C",$fill); $pdf->Cell($fS,5,"-","B",0,"C",$fill);
-                            $pdf->Cell($fN,5,(string)($ln["id_referencia"]??$ln["id_movimiento"]),"B",0,"C",$fill);
-                            $pdf->Cell($fMo,5,utf8_decode(mb_substr($ln["motivo"]??"",0,58)),"B",0,"L",$fill);
+                            $pdf->Cell($fD,5,$ln["tdoc"]??"00","B",0,"C",$fill); $pdf->Cell($fS,5,(($ln["serie"]??"")!==""?$ln["serie"]:"-"),"B",0,"C",$fill);
+                            $pdf->Cell($fN,5,(string)($ln["numero"]??($ln["id_referencia"]??$ln["id_movimiento"])),"B",0,"C",$fill);
+                            $pdf->Cell($fDet,5,utf8_decode(mb_substr($ln["detalle"]??"",0,30)),"B",0,"L",$fill);
+                            $pdf->Cell($fMo,5,utf8_decode(mb_substr($ln["cliente_proveedor"]??"",0,28)),"B",0,"L",$fill);
                             $pdf->Cell($fO,5,$ln["tipo_op"]??"99","B",0,"C",$fill);
                             $pdf->Cell($fE,5,$ln["entrada_cant"]!==null?number_format($ln["entrada_cant"],2):"-","B",0,"R",$fill);
                             $pdf->Cell($fSa,5,$ln["salida_cant"]!==null?number_format($ln["salida_cant"],2):"-","B",0,"R",$fill);
@@ -2319,7 +2320,7 @@ class LogisticaController extends Controller
                         }
                         if ($totalesP) {
                             $pdf->SetFillColor($nR,$nG,$nB); $pdf->SetTextColor(255,255,255); $pdf->SetFont("Helvetica","B",6);
-                            $pdf->Cell($fF+$fD+$fS+$fN+$fMo+$fO,5,"TOTALES DEL PERIODO",0,0,"R",true);
+                            $pdf->Cell($fF+$fD+$fS+$fN+$fDet+$fMo+$fO,5,"TOTALES DEL PERIODO",0,0,"R",true);
                             $pdf->Cell($fE,5,number_format($totalesP["entrada_cant"],2),0,0,"R",true);
                             $pdf->Cell($fSa,5,number_format($totalesP["salida_cant"],2),0,0,"R",true);
                             $pdf->Cell($fSl,5,number_format($totalesP["saldo_cant"],2),0,1,"R",true);
@@ -2446,7 +2447,7 @@ class LogisticaController extends Controller
             if ($tipoKardex === 'fisico') {
                 // ── Tabla FÍSICO SUNAT ────────────────────────────────────
                 // Anchos: 22+22+15+25+107+25+22+22+21 = 281
-                [$fF,$fD,$fS,$fN,$fMo,$fO,$fE,$fSa,$fSl] = [22,22,15,25,107,25,22,22,21];
+                [$fF,$fD,$fS,$fN,$fDet,$fMo,$fO,$fE,$fSa,$fSl] = [20,20,14,24,55,52,22,20,20,19];
 
                 $pdf->SetFont("Helvetica", "B", 6);
                 $pdf->SetFillColor($nR, $nG, $nB); $pdf->SetTextColor(255,255,255);
@@ -2463,6 +2464,7 @@ class LogisticaController extends Controller
                 $siFechaLabel = utf8_decode("SALDO INICIAL AL " . ($desde ? date("d/m/Y", strtotime($desde)) : ""));
                 $pdf->Cell($fF, 5, "-", "B", 0, "C", true);
                 $pdf->Cell($fD+$fS+$fN, 5, $siFechaLabel, "B", 0, "C", true);
+                $pdf->Cell($fDet, 5, "", "B", 0, "L", true);
                 $pdf->Cell($fMo, 5, "", "B", 0, "L", true);
                 $pdf->Cell($fO, 5, "-", "B", 0, "C", true);
                 $pdf->Cell($fE, 5, "-", "B", 0, "C", true);
@@ -2477,9 +2479,10 @@ class LogisticaController extends Controller
                     $pdf->SetTextColor(30, 41, 59);
                     $pdf->Cell($fF,  5, date("d/m/Y", strtotime($ln["fecha"])), "B", 0, "C", $fill);
                     $pdf->Cell($fD,  5, $ln["tdoc"] ?? "00", "B", 0, "C", $fill);
-                    $pdf->Cell($fS,  5, "-", "B", 0, "C", $fill);
-                    $pdf->Cell($fN,  5, (string)($ln["id_referencia"] ?? $ln["id_movimiento"]), "B", 0, "C", $fill);
-                    $pdf->Cell($fMo, 5, utf8_decode(mb_substr($ln["motivo"] ?? "", 0, 58)), "B", 0, "L", $fill);
+                    $pdf->Cell($fS,  5, (($ln["serie"] ?? "") !== "" ? $ln["serie"] : "-"), "B", 0, "C", $fill);
+                    $pdf->Cell($fN,  5, (string)($ln["numero"] ?? ($ln["id_referencia"] ?? $ln["id_movimiento"])), "B", 0, "C", $fill);
+                    $pdf->Cell($fDet, 5, utf8_decode(mb_substr($ln["detalle"] ?? "", 0, 30)), "B", 0, "L", $fill);
+                    $pdf->Cell($fMo, 5, utf8_decode(mb_substr($ln["cliente_proveedor"] ?? "", 0, 28)), "B", 0, "L", $fill);
                     $pdf->Cell($fO,  5, $ln["tipo_op"] ?? "99", "B", 0, "C", $fill);
                     $pdf->Cell($fE,  5, $ln["entrada_cant"] !== null ? number_format($ln["entrada_cant"], 2) : "-", "B", 0, "R", $fill);
                     $pdf->Cell($fSa, 5, $ln["salida_cant"]  !== null ? number_format($ln["salida_cant"], 2)  : "-", "B", 0, "R", $fill);
@@ -2488,7 +2491,7 @@ class LogisticaController extends Controller
                 if ($totales) {
                     $pdf->SetFillColor($nR, $nG, $nB); $pdf->SetTextColor(255,255,255);
                     $pdf->SetFont("Helvetica", "B", 6);
-                    $pdf->Cell($fF+$fD+$fS+$fN+$fMo+$fO, 5, "TOTALES DEL PERIODO", 0, 0, "R", true);
+                    $pdf->Cell($fF+$fD+$fS+$fN+$fDet+$fMo+$fO, 5, "TOTALES DEL PERIODO", 0, 0, "R", true);
                     $pdf->Cell($fE,  5, number_format($totales["entrada_cant"], 2), 0, 0, "R", true);
                     $pdf->Cell($fSa, 5, number_format($totales["salida_cant"], 2),  0, 0, "R", true);
                     $pdf->Cell($fSl, 5, number_format($totales["saldo_cant"], 2),   0, 1, "R", true);
@@ -2789,32 +2792,33 @@ class LogisticaController extends Controller
 
                     if ($tipoKardex === 'fisico') {
                         $encRow = $fila; $headRow = $fila + 1; $fila += 2;
-                        $sheet->mergeCells("A{$encRow}:F{$encRow}"); $sheet->setCellValue("A{$encRow}", "DOCUMENTO"); $sheet->setCellValue("G{$encRow}", "ENTRADAS"); $sheet->setCellValue("H{$encRow}", "SALIDAS"); $sheet->setCellValue("I{$encRow}", "SALDO FINAL");
-                        $sheet->getStyle("A{$encRow}:F{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $navy]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 7], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
-                        $sheet->getStyle("G{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $green]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
-                        $sheet->getStyle("H{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $red]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
-                        $sheet->getStyle("I{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $blue]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
-                        foreach (["A"=>"FECHA","B"=>"T/DOC","C"=>"SERIE","D"=>"NÚMERO","E"=>"CLIENTE/PROVEEDOR","F"=>"TIPO OP.","G"=>"Cant.","H"=>"Cant.","I"=>"Cant."] as $col=>$txt) { $sheet->setCellValue("{$col}{$headRow}", $txt); }
-                        $sheet->getStyle("A{$headRow}:I{$headRow}")->applyFromArray($estiloEnc);
+                        $sheet->mergeCells("A{$encRow}:G{$encRow}"); $sheet->setCellValue("A{$encRow}", "DOCUMENTO"); $sheet->setCellValue("H{$encRow}", "ENTRADAS"); $sheet->setCellValue("I{$encRow}", "SALIDAS"); $sheet->setCellValue("J{$encRow}", "SALDO FINAL");
+                        $sheet->getStyle("A{$encRow}:G{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $navy]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 7], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+                        $sheet->getStyle("H{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $green]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+                        $sheet->getStyle("I{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $red]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+                        $sheet->getStyle("J{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $blue]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+                        foreach (["A"=>"FECHA","B"=>"T/DOC","C"=>"SERIE","D"=>"NÚMERO","E"=>"DETALLE","F"=>"CLIENTE Y/O PROVEEDOR","G"=>"TIPO OP.","H"=>"Cant.","I"=>"Cant.","J"=>"Cant."] as $col=>$txt) { $sheet->setCellValue("{$col}{$headRow}", $txt); }
+                        $sheet->getStyle("A{$headRow}:J{$headRow}")->applyFromArray($estiloEnc);
 
                         $sheet->setCellValue("A{$fila}", "-"); $sheet->setCellValue("B{$fila}", "SALDO INICIAL AL ".($desde?date("d/m/Y",strtotime($desde)):""));
-                        $sheet->mergeCells("B{$fila}:F{$fila}"); $sheet->setCellValue("G{$fila}", "—"); $sheet->setCellValue("H{$fila}", "—"); $sheet->setCellValue("I{$fila}", (float)$saldoInicialP["cantidad"]);
-                        $sheet->getStyle("A{$fila}:I{$fila}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => "FFE8EDF8"]], "font" => ["bold" => true, "size" => 8]]);
+                        $sheet->mergeCells("B{$fila}:G{$fila}"); $sheet->setCellValue("H{$fila}", "—"); $sheet->setCellValue("I{$fila}", "—"); $sheet->setCellValue("J{$fila}", (float)$saldoInicialP["cantidad"]);
+                        $sheet->getStyle("A{$fila}:J{$fila}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => "FFE8EDF8"]], "font" => ["bold" => true, "size" => 8]]);
                         $fila++;
 
                         foreach ($lineasP as $i => $ln) {
-                            $sheet->setCellValue("A{$fila}", $ln["fecha"]); $sheet->setCellValue("B{$fila}", $ln["tdoc"]??"00"); $sheet->setCellValue("C{$fila}", "—");
-                            $sheet->setCellValue("D{$fila}", $ln["id_referencia"]??$ln["id_movimiento"]); $sheet->setCellValue("E{$fila}", $ln["motivo"]??""); $sheet->setCellValue("F{$fila}", $ln["tipo_op"]??"99");
-                            if ($ln["entrada_cant"]!==null) $sheet->setCellValue("G{$fila}", (float)$ln["entrada_cant"]);
-                            if ($ln["salida_cant"]!==null)  $sheet->setCellValue("H{$fila}", (float)$ln["salida_cant"]);
-                            $sheet->setCellValue("I{$fila}", (float)$ln["saldo_cant"]);
-                            $sheet->getStyle("A{$fila}:I{$fila}")->applyFromArray($estiloBorde);
-                            if ($i%2===0) { $sheet->getStyle("A{$fila}:I{$fila}")->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB("FFF5F7FA"); }
+                            $sheet->setCellValue("A{$fila}", $ln["fecha"]); $sheet->setCellValue("B{$fila}", $ln["tdoc"]??"00"); $sheet->setCellValue("C{$fila}", (($ln["serie"]??"")!==""?$ln["serie"]:"—"));
+                            $sheet->setCellValueExplicit("D{$fila}", (string)($ln["numero"]??($ln["id_referencia"]??$ln["id_movimiento"])), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                            $sheet->setCellValue("E{$fila}", $ln["detalle"]??""); $sheet->setCellValue("F{$fila}", $ln["cliente_proveedor"]??""); $sheet->setCellValue("G{$fila}", $ln["tipo_op"]??"99");
+                            if ($ln["entrada_cant"]!==null) $sheet->setCellValue("H{$fila}", (float)$ln["entrada_cant"]);
+                            if ($ln["salida_cant"]!==null)  $sheet->setCellValue("I{$fila}", (float)$ln["salida_cant"]);
+                            $sheet->setCellValue("J{$fila}", (float)$ln["saldo_cant"]);
+                            $sheet->getStyle("A{$fila}:J{$fila}")->applyFromArray($estiloBorde);
+                            if ($i%2===0) { $sheet->getStyle("A{$fila}:J{$fila}")->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setARGB("FFF5F7FA"); }
                             $fila++;
                         }
                         if ($totalesP) {
-                            $sheet->setCellValue("F{$fila}", "TOTALES"); $sheet->setCellValue("G{$fila}", (float)$totalesP["entrada_cant"]); $sheet->setCellValue("H{$fila}", (float)$totalesP["salida_cant"]); $sheet->setCellValue("I{$fila}", (float)$totalesP["saldo_cant"]);
-                            $sheet->getStyle("A{$fila}:I{$fila}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $navy]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8]]);
+                            $sheet->setCellValue("G{$fila}", "TOTALES"); $sheet->setCellValue("H{$fila}", (float)$totalesP["entrada_cant"]); $sheet->setCellValue("I{$fila}", (float)$totalesP["salida_cant"]); $sheet->setCellValue("J{$fila}", (float)$totalesP["saldo_cant"]);
+                            $sheet->getStyle("A{$fila}:J{$fila}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $navy]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8]]);
                             $fila++;
                         }
                     } else {
@@ -2944,64 +2948,65 @@ class LogisticaController extends Controller
 
             if ($tipoKardex === 'fisico') {
                 // ── Tabla FÍSICO Excel ────────────────────────────────────
-                $sheet->mergeCells("A{$encRow}:F{$encRow}");
+                $sheet->mergeCells("A{$encRow}:G{$encRow}");
                 $sheet->setCellValue("A{$encRow}", "DOCUMENTO DE TRASLADO, COMPROBANTE DE PAGO, DOC. INTERNO O SIMILAR");
-                $sheet->getStyle("A{$encRow}:F{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $navy]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 7], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
-                $sheet->setCellValue("G{$encRow}", "ENTRADAS");
-                $sheet->getStyle("G{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $green]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
-                $sheet->setCellValue("H{$encRow}", "SALIDAS");
-                $sheet->getStyle("H{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $red]],   "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
-                $sheet->setCellValue("I{$encRow}", "SALDO FINAL");
-                $sheet->getStyle("I{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $blue]],  "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+                $sheet->getStyle("A{$encRow}:G{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $navy]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 7], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+                $sheet->setCellValue("H{$encRow}", "ENTRADAS");
+                $sheet->getStyle("H{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $green]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+                $sheet->setCellValue("I{$encRow}", "SALIDAS");
+                $sheet->getStyle("I{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $red]],   "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+                $sheet->setCellValue("J{$encRow}", "SALDO FINAL");
+                $sheet->getStyle("J{$encRow}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $blue]],  "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8], "alignment" => ["horizontal" => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
 
                 foreach (["A" => "FECHA", "B" => "T/DOC (TAB 10)", "C" => "SERIE",
-                          "D" => "NÚMERO", "E" => "CLIENTE Y/O PROVEEDOR", "F" => "TIPO OP. (TAB 12)",
-                          "G" => "Cant.", "H" => "Cant.", "I" => "Cant."] as $col => $txt) {
+                          "D" => "NÚMERO", "E" => "DETALLE", "F" => "CLIENTE Y/O PROVEEDOR", "G" => "TIPO OP. (TAB 12)",
+                          "H" => "Cant.", "I" => "Cant.", "J" => "Cant."] as $col => $txt) {
                     $sheet->setCellValue("{$col}{$headRow}", $txt);
                 }
-                $sheet->getStyle("A{$headRow}:I{$headRow}")->applyFromArray($estiloEnc);
+                $sheet->getStyle("A{$headRow}:J{$headRow}")->applyFromArray($estiloEnc);
                 $sheet->getRowDimension($headRow)->setRowHeight(16);
 
                 $primeraFilaDatos = $fila;
                 $siLabel = "SALDO INICIAL AL " . ($desde ? date("d/m/Y", strtotime($desde)) : "");
                 $sheet->setCellValue("A{$fila}", "-");
                 $sheet->setCellValue("B{$fila}", $siLabel);
-                $sheet->mergeCells("B{$fila}:F{$fila}");
-                $sheet->setCellValue("G{$fila}", "—");
+                $sheet->mergeCells("B{$fila}:G{$fila}");
                 $sheet->setCellValue("H{$fila}", "—");
-                $sheet->setCellValue("I{$fila}", (float) $saldoInicial["cantidad"]);
-                $sheet->getStyle("A{$fila}:I{$fila}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => "FFE8EDF8"]], "font" => ["bold" => true, "size" => 8]]);
+                $sheet->setCellValue("I{$fila}", "—");
+                $sheet->setCellValue("J{$fila}", (float) $saldoInicial["cantidad"]);
+                $sheet->getStyle("A{$fila}:J{$fila}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => "FFE8EDF8"]], "font" => ["bold" => true, "size" => 8]]);
                 $fila++;
 
                 foreach ($lineas as $i => $ln) {
                     $sheet->setCellValue("A{$fila}", $ln["fecha"]);
                     $sheet->setCellValue("B{$fila}", $ln["tdoc"] ?? "00");
-                    $sheet->setCellValue("C{$fila}", "—");
-                    $sheet->setCellValue("D{$fila}", $ln["id_referencia"] ?? $ln["id_movimiento"]);
-                    $sheet->setCellValue("E{$fila}", $ln["motivo"] ?? "");
-                    $sheet->setCellValue("F{$fila}", $ln["tipo_op"] ?? "99");
-                    if ($ln["entrada_cant"] !== null) { $sheet->setCellValue("G{$fila}", (float) $ln["entrada_cant"]); }
-                    if ($ln["salida_cant"]  !== null) { $sheet->setCellValue("H{$fila}", (float) $ln["salida_cant"]); }
-                    $sheet->setCellValue("I{$fila}", (float) $ln["saldo_cant"]);
-                    $sheet->getStyle("A{$fila}:I{$fila}")->applyFromArray($estiloBorde);
+                    $sheet->setCellValue("C{$fila}", (($ln["serie"] ?? "") !== "" ? $ln["serie"] : "—"));
+                    $sheet->setCellValueExplicit("D{$fila}", (string)($ln["numero"] ?? ($ln["id_referencia"] ?? $ln["id_movimiento"])), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    $sheet->setCellValue("E{$fila}", $ln["detalle"] ?? "");
+                    $sheet->setCellValue("F{$fila}", $ln["cliente_proveedor"] ?? "");
+                    $sheet->setCellValue("G{$fila}", $ln["tipo_op"] ?? "99");
+                    if ($ln["entrada_cant"] !== null) { $sheet->setCellValue("H{$fila}", (float) $ln["entrada_cant"]); }
+                    if ($ln["salida_cant"]  !== null) { $sheet->setCellValue("I{$fila}", (float) $ln["salida_cant"]); }
+                    $sheet->setCellValue("J{$fila}", (float) $ln["saldo_cant"]);
+                    $sheet->getStyle("A{$fila}:J{$fila}")->applyFromArray($estiloBorde);
                     if ($i % 2 === 0) {
-                        $sheet->getStyle("A{$fila}:I{$fila}")->getFill()
+                        $sheet->getStyle("A{$fila}:J{$fila}")->getFill()
                             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
                             ->getStartColor()->setARGB("FFF5F7FA");
                     }
                     $fila++;
                 }
                 if ($totales) {
-                    $sheet->setCellValue("F{$fila}", "TOTALES DEL PERIODO");
-                    $sheet->setCellValue("G{$fila}", (float) $totales["entrada_cant"]);
-                    $sheet->setCellValue("H{$fila}", (float) $totales["salida_cant"]);
-                    $sheet->setCellValue("I{$fila}", (float) $totales["saldo_cant"]);
-                    $sheet->getStyle("A{$fila}:I{$fila}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $navy]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8]]);
+                    $sheet->setCellValue("G{$fila}", "TOTALES DEL PERIODO");
+                    $sheet->setCellValue("H{$fila}", (float) $totales["entrada_cant"]);
+                    $sheet->setCellValue("I{$fila}", (float) $totales["salida_cant"]);
+                    $sheet->setCellValue("J{$fila}", (float) $totales["saldo_cant"]);
+                    $sheet->getStyle("A{$fila}:J{$fila}")->applyFromArray(["fill" => ["fillType" => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, "startColor" => ["argb" => $navy]], "font" => ["bold" => true, "color" => ["argb" => $white], "size" => 8]]);
                 }
-                foreach (["A" => 12, "B" => 14, "C" => 10, "D" => 14, "E" => 42, "F" => 14, "G" => 12, "H" => 12, "I" => 12] as $col => $w) {
+                foreach (["A" => 12, "B" => 14, "C" => 10, "D" => 14, "E" => 34, "F" => 30, "G" => 14, "H" => 12, "I" => 12, "J" => 12] as $col => $w) {
                     $sheet->getColumnDimension($col)->setWidth($w);
                 }
-                $sheet->getStyle("G{$primeraFilaDatos}:I{$fila}")->getNumberFormat()->setFormatCode("#,##0.00");
+                $sheet->getStyle("H{$primeraFilaDatos}:J{$fila}")->getNumberFormat()->setFormatCode("#,##0.00");
 
             } else {
                 // ── Tabla VALORIZADO Excel ────────────────────────────────
@@ -3155,12 +3160,46 @@ class LogisticaController extends Controller
             ->orderBy("mp.id_movimientos_productos")
             ->get();
 
+        // Comprobante de compra (serie/número + proveedor)
+        $compraIds = $movimientos->where('tipo_referencia', 'compra')->pluck('id_referencia')->filter()->unique()->all();
+        $compraDocs = empty($compraIds) ? collect()
+            : \Illuminate\Support\Facades\DB::table('orden_compra')->whereIn('id_orden_compra', $compraIds)
+                ->get(['id_orden_compra', 'orden_compra_numero_doc', 'orden_compra_tipo_doc', 'orden_compra_nom_prove', 'orden_compra_num_document'])
+                ->keyBy('id_orden_compra');
+
+        // Comprobante de venta (serie/correlativo + cliente)
+        $ventaIds = $movimientos->where('tipo_referencia', 'venta')->pluck('id_referencia')->filter()->unique()->all();
+        $ventaDocs = empty($ventaIds) ? collect()
+            : \Illuminate\Support\Facades\DB::table('ventas as v')->leftJoin('clientes as c', 'c.id_clientes', '=', 'v.id_clientes')
+                ->whereIn('v.id_venta', $ventaIds)
+                ->get(['v.id_venta', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_tipo', 'c.cliente_razonsocial', 'c.cliente_numero'])
+                ->keyBy('id_venta');
+
         $totalECant = $totalEValor = $totalSCant = $totalSValor = 0.0;
         $lineas = [];
         foreach ($movimientos as $mov) {
             $cant  = (float) $mov->cantidad;
             $cu    = (float) $mov->costo_unitario;
             $total = $cant * $cu;
+
+            $serie = ''; $numero = (string) ($mov->id_referencia ?? $mov->id_movimientos_productos);
+            $clienteProveedor = '';
+            $tdoc = self::tdocSunat($mov->tipo_referencia);
+            if ($mov->tipo_referencia === 'compra' && isset($compraDocs[$mov->id_referencia])) {
+                $oc  = $compraDocs[$mov->id_referencia];
+                $doc = trim((string) ($oc->orden_compra_numero_doc ?? ''));
+                if (str_contains($doc, '-')) { [$serie, $numero] = explode('-', $doc, 2); }
+                elseif ($doc !== '')         { $numero = $doc; }
+                $clienteProveedor = trim(($oc->orden_compra_nom_prove ?? '') . (($oc->orden_compra_num_document ?? '') !== '' ? ' - ' . $oc->orden_compra_num_document : ''), ' -');
+                $tdoc = self::tdocTexto($oc->orden_compra_tipo_doc ?? '');
+            } elseif ($mov->tipo_referencia === 'venta' && isset($ventaDocs[$mov->id_referencia])) {
+                $v = $ventaDocs[$mov->id_referencia];
+                $serie  = (string) ($v->venta_serie ?? '');
+                $numero = (string) ($v->venta_correlativo ?? $numero);
+                $clienteProveedor = trim(($v->cliente_razonsocial ?? '') . (($v->cliente_numero ?? '') !== '' ? ' - ' . $v->cliente_numero : ''), ' -');
+                $tdoc = self::tdocTexto($v->venta_tipo ?? '');
+            }
+
             if ((int)$mov->tipo === 1) {
                 $saldoCant  += $cant;  $saldoValor  += $total;
                 $totalECant += $cant;  $totalEValor += $total;
@@ -3168,7 +3207,11 @@ class LogisticaController extends Controller
                     "id_movimiento"   => $mov->id_movimientos_productos,
                     "id_referencia"   => $mov->id_referencia,
                     "tipo_referencia" => $mov->tipo_referencia,
-                    "tdoc"            => self::tdocSunat($mov->tipo_referencia),
+                    "serie"           => $serie,
+                    "numero"          => $numero,
+                    "detalle"         => $mov->motivo,
+                    "cliente_proveedor" => $clienteProveedor,
+                    "tdoc"            => $tdoc,
                     "tipo_op"         => self::tipoOpSunat($mov->tipo_referencia),
                     "usuario" => $mov->usuario,
                     "entrada_cant" => $cant, "entrada_cu" => $cu, "entrada_total" => $total,
@@ -3181,7 +3224,11 @@ class LogisticaController extends Controller
                     "id_movimiento"   => $mov->id_movimientos_productos,
                     "id_referencia"   => $mov->id_referencia,
                     "tipo_referencia" => $mov->tipo_referencia,
-                    "tdoc"            => self::tdocSunat($mov->tipo_referencia),
+                    "serie"           => $serie,
+                    "numero"          => $numero,
+                    "detalle"         => $mov->motivo,
+                    "cliente_proveedor" => $clienteProveedor,
+                    "tdoc"            => $tdoc,
                     "tipo_op"         => self::tipoOpSunat($mov->tipo_referencia),
                     "usuario" => $mov->usuario,
                     "entrada_cant" => null, "entrada_cu" => null, "entrada_total" => null,
@@ -3324,6 +3371,14 @@ class LogisticaController extends Controller
         }
 
         return array_values($grupos);
+    }
+
+    private static function tdocTexto(?string $valor): string
+    {
+        $v = strtoupper(trim((string) $valor));
+        if ($v === '01' || str_contains($v, 'FACTURA')) return 'FACTURA';
+        if ($v === '03' || str_contains($v, 'BOLETA') || str_contains($v, 'VOLETA')) return 'BOLETA';
+        return $v !== '' ? $v : '00';
     }
 
     private static function tdocSunat(?string $tipoRef): string
