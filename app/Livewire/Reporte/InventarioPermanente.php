@@ -15,18 +15,24 @@ class InventarioPermanente extends Component
     public int    $filtroMes  = 0;
     public int    $filtroAnio = 0;
 
+    // Almacén / Empresa (0 = Todos)
+    public int $empresaSeleccionada = 0;
+
     // Familia / Categoría (0 = Todos)
     public int $filtroFamilia   = 0;
     public int $filtroCategoria = 0;
 
-    // Tipo de reporte (estático por el momento)
+    // Tipo de reporte
     public string $tipoReporte = 'detallado_diario'; // detallado_diario | acumulado_dia
 
     // Valorizado | Unidades físicas
     public string $valorizado = 'valorizado'; // valorizado | unidades
 
-    // Filtro de existencias
-    public string $filtroExistencias = 'todos'; // todos | con_saldo | sin_movimientos | con_saldo_con_movimientos
+    // Mostrar productos
+    public string $filtroExistencias = 'todos'; // todos | con_saldo | con_saldo_positivo | con_movimientos | sin_movimientos
+
+    // Ordenar por
+    public string $ordenar = 'producto'; // producto | codigo
 
     private ?Logs $logs = null;
 
@@ -38,6 +44,9 @@ class InventarioPermanente extends Component
         $this->filtroHasta = now()->format('Y-m-d');
         $this->filtroMes   = (int) now()->format('n');
         $this->filtroAnio  = (int) now()->format('Y');
+
+        // Almacén por defecto: primera empresa
+        $this->empresaSeleccionada = (int) (DB::table('empresa')->orderBy('id_empresa')->value('id_empresa') ?? 0);
     }
 
     public function updatedFiltroFamilia(): void { $this->filtroCategoria = 0; }
@@ -55,6 +64,8 @@ class InventarioPermanente extends Component
             'tipo'         => $this->tipoReporte,
             'valorizado'   => $this->valorizado,
             'existencias'  => $this->filtroExistencias,
+            'empresa'      => $this->empresaSeleccionada,
+            'ordenar'      => $this->ordenar,
             '_'            => now()->format('YmdHis'), // anti-caché del navegador
         ];
     }
@@ -79,11 +90,13 @@ class InventarioPermanente extends Component
 
     public function render()
     {
+        $empresas = DB::table('empresa')->where('empresa_estado', '!=', '0')->orderBy('id_empresa')
+            ->get(['id_empresa', 'empresa_razon_social', 'empresa_nombrecomercial']);
         $familias = DB::table('familias')->orderBy('fa_nombre')->get(['id_fa', 'fa_nombre']);
         $categorias = $this->filtroFamilia > 0
             ? DB::table('categorias')->where('id_fa', $this->filtroFamilia)->orderBy('ca_nombre')->get(['id_ca', 'ca_nombre'])
             : DB::table('categorias')->orderBy('ca_nombre')->get(['id_ca', 'ca_nombre']);
 
-        return view('livewire.reporte.inventario-permanente', compact('familias', 'categorias'));
+        return view('livewire.reporte.inventario-permanente', compact('empresas', 'familias', 'categorias'));
     }
 }

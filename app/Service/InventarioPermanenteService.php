@@ -41,8 +41,10 @@ class InventarioPermanenteService
         [$ini, $fin] = $this->rango($p);
         $famId       = (int) ($p['familia']   ?? 0);
         $catId       = (int) ($p['categoria'] ?? 0);
+        $empresaId   = (int) ($p['empresa']   ?? 0);
         $acumulado   = ($p['tipo'] ?? '') === 'acumulado_dia';
         $existencias = $p['existencias'] ?? 'todos';
+        $ordenar     = ($p['ordenar'] ?? 'producto') === 'codigo' ? 'p.pro_codigo' : 'p.pro_nombre';
 
         $productos = DB::table('productos as p')
             ->leftJoin('categorias as c', 'c.id_ca', '=', 'p.id_ca')
@@ -50,16 +52,22 @@ class InventarioPermanenteService
             ->when($famId > 0, fn($q) => $q->where('c.id_fa', $famId))
             ->when($catId > 0, fn($q) => $q->where('p.id_ca', $catId))
             ->select('p.id_pro', 'p.pro_codigo', 'p.pro_nombre', 'p.pro_costo_total')
-            ->orderBy('p.pro_nombre')->get();
+            ->orderBy($ordenar)->get();
 
         $ids = $productos->pluck('id_pro')->all();
         if (empty($ids)) return [];
 
         $cantExpr = 'CAST(d.movimientos_productos_detalle_cantidad AS DECIMAL(18,4))';
 
-        // Stock real actual por producto (suma de todas las sucursales)
+        // Tiendas de la empresa seleccionada (para acotar stock y movimientos)
+        $tiendasEmpresa = $empresaId > 0
+            ? DB::table('tiendas')->where('id_empresa', $empresaId)->pluck('id_tienda')->all()
+            : null;
+
+        // Stock real actual por producto (acotado a la empresa si aplica)
         $stockActual = DB::table('producto_sucursal')
             ->whereIn('id_pro', $ids)
+            ->when($tiendasEmpresa !== null, fn($q) => $q->whereIn('id_tienda', $tiendasEmpresa))
             ->select('id_pro', DB::raw('SUM(ps_stock) as stock'))
             ->groupBy('id_pro')->pluck('stock', 'id_pro');
 
@@ -70,6 +78,7 @@ class InventarioPermanenteService
             ->whereIn('d.id_pro', $ids)
             ->where('d.movimientos_productos_detalle_estado', '1')
             ->where('m.movimientos_productos_estado', 1)
+            ->when($tiendasEmpresa !== null, fn($q) => $q->whereIn('m.id_sucursal', $tiendasEmpresa))
             ->whereDate('m.movimientos_productos_fecha', '>=', $ini->toDateString())
             ->select('d.id_pro', 'm.movimientos_productos_tipo as tipo', DB::raw("SUM($cantExpr) as cant"))
             ->groupBy('d.id_pro', 'm.movimientos_productos_tipo')->get();
@@ -94,6 +103,7 @@ class InventarioPermanenteService
             ->whereIn('d.id_pro', $ids)
             ->where('d.movimientos_productos_detalle_estado', '1')
             ->where('m.movimientos_productos_estado', 1)
+            ->when($tiendasEmpresa !== null, fn($q) => $q->whereIn('m.id_sucursal', $tiendasEmpresa))
             ->whereBetween(DB::raw('DATE(m.movimientos_productos_fecha)'), [$ini->toDateString(), $fin->toDateString()])
             ->select('d.id_pro', 'm.movimientos_productos_fecha as fecha', 'm.movimientos_productos_tipo as tipo',
                 'm.movimientos_productos_motivo as motivo',
@@ -145,6 +155,7 @@ class InventarioPermanenteService
             }
 
             $incluir = match ($existencias) {
+                'con_saldo'          => abs($saldoC) > 0.0001,
                 'con_saldo_positivo' => $saldoC > 0.0001,
                 'con_saldo_negativo' => $saldoC < -0.0001,
                 'sin_movimientos'    => !$tieneMovs,
