@@ -24,6 +24,8 @@ class ListarIngresos extends Component
     public ?array $detalleProveedor    = null;
     public array  $detalleTransportistas = [];
     public array  $detalleItems        = [];
+    public ?array $detalleResumen      = null;
+    public string $detalleObservacion  = '';
 
     private ?Logs $logs         = null;
     private int   $cachedRoleId = 0;
@@ -84,6 +86,8 @@ class ListarIngresos extends Component
         $this->detalleProveedor      = null;
         $this->detalleTransportistas = [];
         $this->detalleItems          = [];
+        $this->detalleResumen        = null;
+        $this->detalleObservacion    = '';
 
         try {
             $oc = DB::table('orden_compra as oc')
@@ -93,6 +97,9 @@ class ListarIngresos extends Component
                     'oc.id_orden_compra', 'oc.orden_compra_numero', 'oc.orden_compra_estado',
                     'oc.orden_compra_fecha_emision_doc', 'oc.orden_compra_numero_doc',
                     'oc.orden_compra_tipo_doc', 'oc.condicion_pago', 'oc.orden_compra_igv_porcentaje',
+                    'oc.fecha_almacenamiento', 'oc.orden_compra_fecha_recibida', 'oc.orden_compra_observacion',
+                    'oc.orden_compra_total', 'oc.orden_compra_flete', 'oc.orden_compra_descuento_monto',
+                    'oc.orden_compra_igv_monto', 'oc.orden_compra_percepcion_monto',
                     'pv.proveedores_nombre', 'pv.proveedores_numero_documento'
                 )
                 ->first();
@@ -105,14 +112,18 @@ class ListarIngresos extends Component
             $igvPct = (float) ($oc->orden_compra_igv_porcentaje ?? 0);
 
             $this->detalleOrden = [
-                'numero'        => $oc->orden_compra_numero,
-                'tipo_doc'      => $oc->orden_compra_tipo_doc ?? '—',
-                'numero_doc'    => $oc->orden_compra_numero_doc ?? '—',
-                'condicion'     => $oc->condicion_pago,
-                'estado'        => $oc->orden_compra_estado,
-                'fecha_emision' => $oc->orden_compra_fecha_emision_doc,
-                'igv_pct'       => $igvPct,
+                'numero'             => $oc->orden_compra_numero,
+                'tipo_doc'           => $oc->orden_compra_tipo_doc ?? '—',
+                'numero_doc'         => $oc->orden_compra_numero_doc ?? '—',
+                'condicion'          => $oc->condicion_pago,
+                'estado'             => $oc->orden_compra_estado,
+                'fecha_emision'      => $oc->orden_compra_fecha_emision_doc,
+                'fecha_almacenamiento' => $oc->fecha_almacenamiento,
+                'fecha_recepcion'    => $oc->orden_compra_fecha_recibida,
+                'igv_pct'            => $igvPct,
             ];
+
+            $this->detalleObservacion = (string) ($oc->orden_compra_observacion ?? '');
 
             $this->detalleProveedor = [
                 'nombre' => $oc->proveedores_nombre,
@@ -157,6 +168,19 @@ class ListarIngresos extends Component
                     'total'             => round($subtotal + $igv + $flete, 2),
                 ];
             })->all();
+
+            // Resumen de importes
+            $subtotalProd = round($items->sum(fn($it) => (float) $it->detalle_compra_total_pedido), 2);
+            $descuento    = (float) ($oc->orden_compra_descuento_monto ?? 0);
+            $this->detalleResumen = [
+                'subtotal'      => $subtotalProd,
+                'descuento'     => $descuento,
+                'subtotal_neto' => round($subtotalProd - $descuento, 2),
+                'igv'           => (float) ($oc->orden_compra_igv_monto ?? 0),
+                'percepcion'    => (float) ($oc->orden_compra_percepcion_monto ?? 0),
+                'flete'         => (float) ($oc->orden_compra_flete ?? 0),
+                'total'         => (float) ($oc->orden_compra_total ?? 0),
+            ];
         } catch (\Exception $e) {
             $this->logs?->insertarLog($e);
         }

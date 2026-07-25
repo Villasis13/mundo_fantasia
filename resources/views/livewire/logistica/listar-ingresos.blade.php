@@ -127,109 +127,147 @@
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body" style="background:#f8f9fb;">
                     @if($detalleOrden)
                         @php
-                            $estadoMap = ['pendiente'=>'Pendiente','en_transito'=>'En Tránsito','recibido'=>'Recepcionado','anulado'=>'Anulado'];
+                            $estadoMap = ['pendiente'=>['Pendiente','#6c757d'],'en_transito'=>['En Tránsito','#e0a800'],'recibido'=>['Recepcionado','#6610f2'],'anulado'=>['Anulado','#dc3545']];
+                            $est = $estadoMap[$detalleOrden['estado']] ?? [ucfirst($detalleOrden['estado']),'#6c757d'];
+                            $fmt = fn($f) => $f ? \Carbon\Carbon::parse($f)->format('d/m/Y') : '—';
                         @endphp
 
-                        {{-- Cabecera: comprobante + orden + condición + estado + fecha --}}
-                        <div class="d-flex flex-wrap align-items-center gap-3 pb-3 mb-3 border-bottom">
+                        {{-- Cabecera --}}
+                        <div class="d-flex flex-wrap align-items-start gap-2 pb-3 mb-3 border-bottom">
                             <div>
-                                <div class="fw-bold fs-5">
+                                <div class="fw-bold" style="font-size:1.25rem;">
                                     {{ $detalleOrden['tipo_doc'] }} {{ $detalleOrden['numero_doc'] }}
                                 </div>
                                 <small class="text-muted">Orden N.° {{ $detalleOrden['numero'] }}</small>
                             </div>
-                            <div class="ms-auto d-flex flex-wrap gap-2">
-                                <span class="badge {{ $detalleOrden['condicion'] === 'credito' ? 'bg-warning text-dark' : 'bg-success' }}">
-                                    {{ ucfirst($detalleOrden['condicion']) }}
+                            <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
+                                <span class="badge {{ $detalleOrden['condicion'] === 'credito' ? 'text-dark' : '' }}"
+                                      style="background:{{ $detalleOrden['condicion'] === 'credito' ? '#ffc107' : '#28a745' }};font-size:.8rem;padding:.45em .8em;">
+                                    {{ strtoupper($detalleOrden['condicion']) }}
                                 </span>
-                                <span class="badge bg-primary">
-                                    {{ $estadoMap[$detalleOrden['estado']] ?? ucfirst($detalleOrden['estado']) }}
-                                </span>
-                                <span class="badge bg-light text-dark border">
-                                    <i class="fa-regular fa-calendar me-1"></i>
-                                    {{ $detalleOrden['fecha_emision']
-                                        ? \Carbon\Carbon::parse($detalleOrden['fecha_emision'])->format('d/m/Y')
-                                        : '—' }}
+                                <span class="badge" style="background:{{ $est[1] }};font-size:.8rem;padding:.45em .8em;">{{ strtoupper($est[0]) }}</span>
+                                <span class="badge bg-white text-dark border" style="font-size:.8rem;padding:.45em .8em;">
+                                    <i class="fa-regular fa-calendar me-1"></i>{{ $fmt($detalleOrden['fecha_emision']) }}
                                 </span>
                             </div>
                         </div>
 
+                        {{-- Proveedor + Información del ingreso --}}
                         <div class="row g-3 mb-3">
-                            {{-- Proveedor --}}
                             <div class="col-12 col-md-6">
-                                <div class="border rounded p-3 h-100">
-                                    <h6 class="fw-bold text-muted small text-uppercase mb-2">
-                                        <i class="fa-solid fa-truck-field me-1"></i> Proveedor
-                                    </h6>
-                                    <div class="small"><span class="text-muted">Nombre comercial:</span> <span class="fw-semibold">{{ $detalleProveedor['nombre'] ?? '—' }}</span></div>
-                                    <div class="small"><span class="text-muted">Razón social:</span> <span class="fw-semibold">{{ $detalleProveedor['nombre'] ?? '—' }}</span></div>
+                                <div class="bg-white border rounded p-3 h-100">
+                                    <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-solid fa-building me-1 text-primary"></i> Proveedor</h6>
+                                    <div class="small mb-1"><span class="text-muted">Nombre comercial:</span> <span class="fw-semibold">{{ $detalleProveedor['nombre'] ?? '—' }}</span></div>
+                                    <div class="small mb-1"><span class="text-muted">Razón social:</span> <span class="fw-semibold">{{ $detalleProveedor['nombre'] ?? '—' }}</span></div>
                                     <div class="small"><span class="text-muted">RUC:</span> <span class="fw-semibold">{{ $detalleProveedor['ruc'] ?? '—' }}</span></div>
                                 </div>
                             </div>
-                            {{-- Transportista --}}
                             <div class="col-12 col-md-6">
-                                <div class="border rounded p-3 h-100">
-                                    <h6 class="fw-bold text-muted small text-uppercase mb-2">
-                                        <i class="fa-solid fa-truck-fast me-1"></i> Transportista
-                                    </h6>
-                                    @if(count($detalleTransportistas))
-                                        @foreach($detalleTransportistas as $t)
-                                            <div class="{{ !$loop->first ? 'border-top pt-2 mt-2' : '' }}">
-                                                <div class="small"><span class="text-muted">Nombre / Razón social:</span> <span class="fw-semibold">{{ $t['oc_trans_nombre'] ?: '—' }}</span></div>
-                                                <div class="small"><span class="text-muted">RUC:</span> <span class="fw-semibold">{{ $t['oc_trans_ruc'] ?: '—' }}</span></div>
-                                                <div class="small"><span class="text-muted">N° Factura:</span> <span class="fw-semibold">{{ $t['oc_trans_fact'] ?: '—' }}</span></div>
-                                                <div class="small"><span class="text-muted">Fecha:</span> <span class="fw-semibold">{{ $t['oc_trans_fecha'] ?: '—' }}</span></div>
-                                            </div>
-                                        @endforeach
-                                    @else
-                                        <p class="text-muted small mb-0"><i class="fa-solid fa-circle-info me-1"></i>No se registró transportista para esta compra.</p>
-                                    @endif
+                                <div class="bg-white border rounded p-3 h-100">
+                                    <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-regular fa-calendar-days me-1 text-primary"></i> Información del ingreso</h6>
+                                    <div class="small mb-1"><span class="text-muted">Fecha de emisión:</span> <span class="fw-semibold">{{ $fmt($detalleOrden['fecha_emision']) }}</span></div>
+                                    <div class="small mb-1"><span class="text-muted">Fecha de almacenamiento:</span> <span class="fw-semibold">{{ $fmt($detalleOrden['fecha_almacenamiento']) }}</span></div>
+                                    <div class="small"><span class="text-muted">Fecha de recepción:</span> <span class="fw-semibold">{{ $fmt($detalleOrden['fecha_recepcion']) }}</span></div>
                                 </div>
                             </div>
                         </div>
 
                         {{-- Productos --}}
-                        <h6 class="fw-bold text-muted small text-uppercase mb-2">
-                            <i class="fa-solid fa-boxes-stacked me-1"></i> Productos
-                        </h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.83rem;">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Código</th>
-                                        <th>Descripción</th>
-                                        <th>Presentación</th>
-                                        <th class="text-end">Cant. comprada</th>
-                                        <th class="text-end">Cant. ingresada</th>
-                                        <th class="text-end">Costo unit.</th>
-                                        <th class="text-end">Flete</th>
-                                        <th class="text-end">IGV</th>
-                                        <th class="text-end">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse($detalleItems as $it)
+                        <div class="bg-white border rounded p-3 mb-3">
+                            <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-solid fa-box me-1 text-primary"></i> Productos</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.82rem;">
+                                    <thead class="table-light text-center">
                                         <tr>
-                                            <td>{{ $it['codigo'] }}</td>
-                                            <td>{{ $it['descripcion'] }}</td>
-                                            <td>{{ $it['presentacion'] }}</td>
-                                            <td class="text-end">{{ number_format($it['cantidad'], 2) }}</td>
-                                            <td class="text-end">
-                                                {{ $it['cantidad_recibida'] !== null ? number_format($it['cantidad_recibida'], 2) : '—' }}
-                                            </td>
-                                            <td class="text-end">{{ number_format($it['costo_unitario'], 2) }}</td>
-                                            <td class="text-end">{{ number_format($it['flete'], 2) }}</td>
-                                            <td class="text-end">{{ number_format($it['igv'], 2) }}</td>
-                                            <td class="text-end fw-semibold">{{ number_format($it['total'], 2) }}</td>
+                                            <th>Código</th><th>Descripción</th><th>Presentación</th>
+                                            <th>Cant.<br>comprada</th><th>Cant.<br>ingresada</th>
+                                            <th>Costo unit.</th><th>Flete</th><th>IGV</th><th>Total</th>
                                         </tr>
-                                    @empty
-                                        <tr><td colspan="9" class="text-center text-muted py-3">Sin productos registrados.</td></tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($detalleItems as $it)
+                                            <tr>
+                                                <td>{{ $it['codigo'] }}</td>
+                                                <td>{{ $it['descripcion'] }}</td>
+                                                <td class="text-center">{{ $it['presentacion'] }}</td>
+                                                <td class="text-center">{{ number_format($it['cantidad'], 2) }}</td>
+                                                <td class="text-center">{{ $it['cantidad_recibida'] !== null ? number_format($it['cantidad_recibida'], 2) : '—' }}</td>
+                                                <td class="text-center">{{ number_format($it['costo_unitario'], 2) }}</td>
+                                                <td class="text-center">{{ number_format($it['flete'], 2) }}</td>
+                                                <td class="text-center">{{ number_format($it['igv'], 2) }}</td>
+                                                <td class="text-end fw-semibold">{{ number_format($it['total'], 2) }}</td>
+                                            </tr>
+                                        @empty
+                                            <tr><td colspan="9" class="text-center text-muted py-3">Sin productos registrados.</td></tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {{-- Transportistas --}}
+                        <div class="bg-white border rounded p-3 mb-3">
+                            <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-solid fa-truck me-1 text-primary"></i> Transportistas</h6>
+                            @if(count($detalleTransportistas))
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.82rem;">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th style="width:40px;">#</th><th>Nombre / Razón social</th>
+                                                <th>RUC</th><th>N.° documento</th><th class="text-center">Fecha</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach($detalleTransportistas as $i => $t)
+                                                <tr>
+                                                    <td>{{ $i + 1 }}</td>
+                                                    <td>{{ $t['oc_trans_nombre'] ?: '—' }}</td>
+                                                    <td>{{ $t['oc_trans_ruc'] ?: '—' }}</td>
+                                                    <td>{{ $t['oc_trans_fact'] ?: '—' }}</td>
+                                                    <td class="text-center">{{ $t['oc_trans_fecha'] ? \Carbon\Carbon::parse($t['oc_trans_fecha'])->format('d/m/Y') : '—' }}</td>
+                                                </tr>
+                                            @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                            @else
+                                <p class="text-muted small mb-0"><i class="fa-solid fa-circle-info me-1"></i>No se registró transportista para esta compra.</p>
+                            @endif
+                        </div>
+
+                        {{-- Observaciones + Resumen --}}
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <div class="bg-white border rounded p-3 h-100">
+                                    <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-regular fa-comment me-1 text-primary"></i> Observaciones</h6>
+                                    <div class="border rounded p-2 bg-light small" style="min-height:120px;">
+                                        {{ trim($detalleObservacion) !== '' ? $detalleObservacion : '' }}
+                                        @if(trim($detalleObservacion) === '')
+                                            <span class="text-muted fst-italic">Sin observaciones registradas.</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <div class="bg-white border rounded p-3 h-100">
+                                    <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-regular fa-file-lines me-1 text-primary"></i> Resumen de importes</h6>
+                                    @if($detalleResumen)
+                                        <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Subtotal de productos:</span><span>S/ {{ number_format($detalleResumen['subtotal'], 2) }}</span></div>
+                                        <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Descuento:</span><span>S/ {{ number_format($detalleResumen['descuento'], 2) }}</span></div>
+                                        <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Subtotal después del descuento:</span><span>S/ {{ number_format($detalleResumen['subtotal_neto'], 2) }}</span></div>
+                                        <div class="d-flex justify-content-between small mb-1"><span class="text-muted">IGV:</span><span>S/ {{ number_format($detalleResumen['igv'], 2) }}</span></div>
+                                        <div class="d-flex justify-content-between small mb-1"><span class="text-muted">Percepción IGV:</span><span>S/ {{ number_format($detalleResumen['percepcion'], 2) }}</span></div>
+                                        <div class="d-flex justify-content-between small mb-2 pb-2 border-bottom"><span class="text-muted">Flete:</span><span>S/ {{ number_format($detalleResumen['flete'], 2) }}</span></div>
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span class="fw-bold">Total del ingreso:</span>
+                                            <span class="fw-bold" style="font-size:1.4rem;color:#4b3fd4;">S/ {{ number_format($detalleResumen['total'], 2) }}</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
                         </div>
                     @else
                         <div class="text-muted py-4 text-center">
