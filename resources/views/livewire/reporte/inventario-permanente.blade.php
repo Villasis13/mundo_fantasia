@@ -36,6 +36,12 @@
         </div>
     @endif
 
+    {{-- Título --}}
+    <div class="mb-3">
+        <h4 class="fw-bold mb-0"><i class="fa-solid fa-warehouse me-2 text-primary"></i>Inventario Permanente</h4>
+        <small class="text-muted">Genera el reporte de inventario permanente (kardex) en Excel o PDF.</small>
+    </div>
+
     {{-- ══ PARÁMETROS DEL REPORTE ══ --}}
     <div class="ip-card">
         <div class="ip-sec-title"><i class="fa-solid fa-sliders"></i> Parámetros del reporte</div>
@@ -150,11 +156,11 @@
     @can('inventario_permanente.exportar')
     <div class="d-flex justify-content-end gap-2">
         <a href="{{ route('reporte.inventario_permanente_excel', $exportParams) }}" target="_blank"
-           class="btn btn-success d-inline-flex align-items-center gap-2 px-3">
-            <img src="{{ asset('iconos_svg/microsoft-excel.svg') }}" alt="Excel" style="width:18px;height:18px;filter:brightness(0) invert(1);"> Exportar Excel
+           class="btn btn-outline-success fw-semibold d-inline-flex align-items-center gap-2 px-3">
+            <img src="{{ asset('iconos_svg/microsoft-excel.svg') }}" alt="Excel" style="width:18px;height:18px;vertical-align:middle;"> Exportar Excel
         </a>
         <a href="{{ route('reporte.inventario_permanente_pdf', $exportParams) }}" target="_blank"
-           class="btn btn-danger d-inline-flex align-items-center gap-2 px-3">
+           class="btn btn-outline-danger fw-semibold d-inline-flex align-items-center gap-2 px-3">
             <i class="fa-solid fa-file-pdf"></i> Exportar PDF
         </a>
     </div>

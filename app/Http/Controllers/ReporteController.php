@@ -4303,6 +4303,8 @@ class ReporteController extends Controller
             }
 
             foreach (range('A', $lastCol) as $col) $sheet->getColumnDimension($col)->setAutoSize(true);
+            // Columna de Fecha con ancho fijo (más angosta)
+            $sheet->getColumnDimension('A')->setAutoSize(false)->setWidth(11);
 
             $nombreArchivo = 'inventario_permanente_' . now()->format('Ymd_His') . '.xlsx';
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
