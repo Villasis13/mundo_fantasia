@@ -1,5 +1,5 @@
 @extends('layouts.plantilla')
-@section('title','Autoconsumo')
+@section('title','Guía de Control Interno de Salidas')
 @section('content')
 <div class="tab-content">
     <div id="vista_para_opciones_{{$opciones[0]->id_opciones}}"

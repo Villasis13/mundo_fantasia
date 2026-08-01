@@ -23,88 +23,91 @@
         <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content border-0 shadow">
                 <div class="modal-header">
-                    <h5 class="modal-title fw-semibold">
-                        <i class="fa-solid fa-fire-burner me-2 text-warning"></i>
-                        Detalle de Autoconsumo
-                        @if($detalleAutoconsumo)
-                            <span class="fw-normal text-muted small ms-2">— {{ $detalleAutoconsumo->autoconsumo_numero }}</span>
-                        @endif
+                    <h5 class="modal-title fw-bold">
+                        <i class="fa-solid fa-eye me-2 text-primary"></i>Detalle de la salida
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body" style="background:#f8f9fb;">
                     @if($detalleAutoconsumo)
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-4">
-                            <small class="text-muted d-block">Ubicación</small>
-                            <strong>{{ $detalleAutoconsumo->ubicacion_nombre }}</strong>
-                            @if($detalleAutoconsumo->empresa_nombre)
-                                <small class="text-muted d-block">{{ $detalleAutoconsumo->empresa_nombre }}</small>
-                            @endif
+                    @php
+                        $estadoBadge = ['registrado'=>'bg-success','anulado'=>'bg-danger'][$detalleAutoconsumo->autoconsumo_estado] ?? 'bg-secondary';
+                        $totUnid = $detalleItems->sum('detalle_cantidad');
+                        $totCosto = $detalleItems->sum(fn($i) => $i->detalle_cantidad * $i->detalle_costo);
+                    @endphp
+
+                    {{-- Cabecera --}}
+                    <div class="d-flex flex-wrap align-items-start gap-2 pb-3 mb-3 border-bottom">
+                        <div>
+                            <div class="fw-bold" style="font-size:1.1rem;">GUÍA INTERNA N.° {{ $detalleAutoconsumo->autoconsumo_numero }}</div>
+                            <small class="text-muted">Salida de control interno</small>
                         </div>
-                        <div class="col-md-2">
-                            <small class="text-muted d-block">Área</small>
-                            <strong>{{ $detalleAutoconsumo->autoconsumo_area }}</strong>
-                        </div>
-                        <div class="col-md-3">
-                            <small class="text-muted d-block">Motivo</small>
-                            <strong>{{ $detalleAutoconsumo->autoconsumo_motivo ?: '—' }}</strong>
-                        </div>
-                        <div class="col-md-3">
-                            <small class="text-muted d-block">Fecha</small>
-                            <strong>{{ \Carbon\Carbon::parse($detalleAutoconsumo->autoconsumo_fecha)->format('d/m/Y') }}</strong>
-                        </div>
-                        <div class="col-md-4">
-                            <small class="text-muted d-block">Registrado por</small>
-                            <strong>{{ $detalleAutoconsumo->nombre_users }}</strong>
-                        </div>
-                        <div class="col-md-3">
-                            <small class="text-muted d-block">Estado</small>
-                            <span class="badge bg-success">Registrado</span>
+                        <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
+                            <span class="badge {{ $estadoBadge }}" style="font-size:.8rem;padding:.45em .8em;">{{ strtoupper($detalleAutoconsumo->autoconsumo_estado) }}</span>
+                            <span class="badge bg-white text-dark border" style="font-size:.8rem;padding:.45em .8em;">
+                                <i class="fa-regular fa-calendar me-1"></i>{{ \Carbon\Carbon::parse($detalleAutoconsumo->autoconsumo_fecha)->format('d/m/Y') }}
+                            </span>
                         </div>
                     </div>
 
-                    <div class="table-responsive">
-                        <table class="table table-sm table-bordered align-middle">
-                            <thead class="table-dark encabezado_tabla_color">
-                                <tr>
-                                    <th>#</th>
-                                    <th>Código</th>
-                                    <th>Producto</th>
-                                    <th class="text-end" style="width:100px">Cantidad</th>
-                                    <th class="text-end" style="width:100px">Costo Unit.</th>
-                                    <th class="text-end" style="width:110px">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($detalleItems as $idx => $item)
-                                <tr>
-                                    <td class="text-muted small">{{ $idx + 1 }}</td>
-                                    <td class="text-muted small">{{ $item->pro_codigo }}</td>
-                                    <td class="fw-semibold">{{ $item->pro_nombre }}</td>
-                                    <td class="text-end">{{ number_format($item->detalle_cantidad, 2) }}</td>
-                                    <td class="text-end">{{ number_format($item->detalle_costo, 4) }}</td>
-                                    <td class="text-end fw-semibold">
-                                        S/ {{ number_format($item->detalle_cantidad * $item->detalle_costo, 2) }}
-                                    </td>
-                                </tr>
-                                @empty
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted py-3">Sin productos</td>
-                                </tr>
-                                @endforelse
-                            </tbody>
-                            @if($detalleItems->count() > 0)
-                            <tfoot>
-                                <tr class="table-light">
-                                    <td colspan="5" class="text-end fw-bold">Total:</td>
-                                    <td class="text-end fw-bold">
-                                        S/ {{ number_format($detalleItems->sum(fn($i) => $i->detalle_cantidad * $i->detalle_costo), 2) }}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                            @endif
-                        </table>
+                    {{-- Información documento + movimiento --}}
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-6">
+                            <div class="bg-white border rounded p-3 h-100">
+                                <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-regular fa-file-lines me-1 text-primary"></i> Información del documento</h6>
+                                <div class="small mb-1"><span class="text-muted">N.° de orden:</span> <span class="fw-semibold">{{ $detalleAutoconsumo->autoconsumo_numero }}</span></div>
+                                <div class="small mb-1"><span class="text-muted">Fecha:</span> <span class="fw-semibold">{{ \Carbon\Carbon::parse($detalleAutoconsumo->autoconsumo_fecha)->format('d/m/Y') }}</span></div>
+                                <div class="small"><span class="text-muted">Documento:</span> <span class="fw-semibold">Guía interna</span></div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="bg-white border rounded p-3 h-100">
+                                <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-solid fa-arrow-right-from-bracket me-1 text-primary"></i> Información del movimiento</h6>
+                                <div class="small mb-1"><span class="text-muted">Motivo:</span> <span class="fw-semibold">{{ $detalleAutoconsumo->autoconsumo_motivo ?: '—' }}</span></div>
+                                <div class="small mb-1"><span class="text-muted">Código SUNAT:</span> <span class="fw-semibold">{{ $detalleAutoconsumo->autoconsumo_cod_sunat ?: '—' }}</span></div>
+                                <div class="small"><span class="text-muted">Estado:</span> <span class="badge {{ $estadoBadge }}">{{ ucfirst($detalleAutoconsumo->autoconsumo_estado) }}</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Productos retirados --}}
+                    <div class="bg-white border rounded p-3 mb-3">
+                        <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-solid fa-box me-1 text-primary"></i> Productos retirados</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.82rem;">
+                                <thead class="table-light text-center">
+                                    <tr>
+                                        <th style="width:40px;">#</th><th>Código</th><th>Producto</th>
+                                        <th>Cantidad</th><th>Costo</th><th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @forelse($detalleItems as $idx => $item)
+                                    <tr>
+                                        <td class="text-center">{{ $idx + 1 }}</td>
+                                        <td>{{ $item->pro_codigo }}</td>
+                                        <td>{{ $item->pro_nombre }}</td>
+                                        <td class="text-center">{{ number_format($item->detalle_cantidad, 2) }}</td>
+                                        <td class="text-end">{{ number_format($item->detalle_costo, 2) }}</td>
+                                        <td class="text-end fw-semibold">S/ {{ number_format($item->detalle_cantidad * $item->detalle_costo, 2) }}</td>
+                                    </tr>
+                                    @empty
+                                    <tr><td colspan="6" class="text-center text-muted py-3">Sin productos</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex flex-column align-items-end mt-3 me-2">
+                            <div class="small"><span class="text-muted me-2">Total de unidades:</span> <span class="fw-semibold">{{ number_format($totUnid, 2) }}</span></div>
+                            <div><span class="text-muted me-2">Costo total:</span> <span class="fw-bold" style="font-size:1.15rem;color:#4b3fd4;">S/ {{ number_format($totCosto, 2) }}</span></div>
+                        </div>
+                    </div>
+
+                    {{-- Información de registro --}}
+                    <div class="bg-white border rounded p-3">
+                        <h6 class="fw-bold text-muted small text-uppercase mb-2"><i class="fa-regular fa-circle-user me-1 text-primary"></i> Información de registro</h6>
+                        <div class="small mb-1"><span class="text-muted">Registrado por:</span> <span class="fw-semibold">{{ $detalleAutoconsumo->nombre_users }}</span></div>
+                        <div class="small"><span class="text-muted">Fecha y hora:</span> <span class="fw-semibold">{{ \Carbon\Carbon::parse($detalleAutoconsumo->created_at)->format('d/m/Y - h:i a') }}</span></div>
                     </div>
                     @endif
                 </div>
@@ -123,8 +126,8 @@
         <div class="card-header bg-white border-bottom py-3">
             <div class="d-flex align-items-center justify-content-between">
                 <h5 class="mb-0 fw-bold">
-                    <i class="fa-solid fa-fire-burner me-2 text-warning"></i>
-                    Nuevo Autoconsumo
+                    <i class="fa-solid fa-dolly me-2 text-warning"></i>
+                    Nueva salida
                 </h5>
                 <button class="btn btn-sm btn-outline-secondary" wire:click="volverHistorial">
                     <i class="fa-solid fa-arrow-left me-1"></i> Volver
@@ -135,35 +138,50 @@
 
             {{-- Campos del formulario --}}
             <div class="row g-3 mb-4">
-                <div class="col-md-2">
+                <div class="col-md-3">
                     <label class="form-label fw-semibold">
-                        <i class="fa-solid fa-tag me-1 text-secondary"></i>
-                        Área <span class="text-danger">*</span>
+                        <i class="fa-solid fa-hashtag me-1 text-secondary"></i>
+                        Número de orden <span class="text-danger">*</span>
                     </label>
-                    <select wire:model="area" class="form-select">
-                        <option value="Administración">Administración</option>
-                        <option value="Almacén">Almacén</option>
-                        <option value="Ventas">Ventas</option>
-                    </select>
+                    <input type="text" wire:model="numeroOrden" maxlength="15"
+                           inputmode="numeric"
+                           oninput="this.value=this.value.replace(/\D/g,'')"
+                           class="form-control fw-semibold @error('numeroOrden') is-invalid @enderror"
+                           placeholder="Solo números">
+                    @error('numeroOrden') <div class="invalid-feedback">{{ $message }}</div> @enderror
                 </div>
 
-                <div class="col-md-2">
+                <div class="col-md-3">
                     <label class="form-label fw-semibold">
                         <i class="fa-solid fa-calendar-day me-1 text-secondary"></i>
-                        Fecha de Emisión <span class="text-danger">*</span>
+                        Fecha <span class="text-danger">*</span>
                     </label>
                     <input type="date" wire:model="fechaEmision"
                            class="form-control @error('fechaEmision') is-invalid @enderror">
                     @error('fechaEmision') <div class="invalid-feedback">{{ $message }}</div> @enderror
                 </div>
 
-                <div class="col-12">
+                <div class="col-md-3">
                     <label class="form-label fw-semibold">
                         <i class="fa-solid fa-comment me-1 text-secondary"></i>
-                        Motivo <span class="text-muted small">(opcional)</span>
+                        Motivo <span class="text-danger">*</span>
                     </label>
-                    <textarea wire:model="motivo" class="form-control" rows="2"
-                              placeholder="Describa el motivo del autoconsumo (opcional)"></textarea>
+                    <select wire:model.live="motivo" class="form-select @error('motivo') is-invalid @enderror">
+                        <option value="">— Seleccione motivo —</option>
+                        @foreach($motivos as $m)
+                            <option value="{{ $m }}">{{ $m }}</option>
+                        @endforeach
+                    </select>
+                    @error('motivo') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-barcode me-1 text-secondary"></i>
+                        Código SUNAT
+                    </label>
+                    <input type="text" class="form-control text-center fw-semibold"
+                           value="{{ $codSunat !== '' ? $codSunat : '—' }}" readonly>
                 </div>
             </div>
 
@@ -299,7 +317,7 @@
                         wire:loading.attr="disabled" wire:target="guardar"
                         {{ (!$ubicOk || empty($items)) ? 'disabled' : '' }}>
                     <span wire:loading.remove wire:target="guardar">
-                        <i class="fa-solid fa-floppy-disk me-1"></i> Registrar Autoconsumo
+                        <i class="fa-solid fa-floppy-disk me-1"></i> Registrar salida
                     </span>
                     <span wire:loading wire:target="guardar">
                         <span class="spinner-border" style="width:1.4rem;height:1.4rem;vertical-align:middle;" role="status"></span> Guardando...
@@ -424,16 +442,16 @@
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
                     <h5 class="mb-0 fw-bold">
-                        <i class="fa-solid fa-fire-burner me-2 text-warning"></i>
-                        Autoconsumo
+                        <i class="fa-solid fa-dolly me-2 text-warning"></i>
+                        Guía de Control Interno de Salidas
                     </h5>
-                    <small class="text-muted">Historial de salidas por autoconsumo.</small>
+                    <small class="text-muted">Historial de salidas internas.</small>
                 </div>
                 @can('autoconsumo.crear')
                 <button class="btn btn-warning fw-semibold text-dark" wire:click="nuevoAutoconsumo"
                         wire:loading.attr="disabled" wire:target="nuevoAutoconsumo">
                     <span wire:loading.remove wire:target="nuevoAutoconsumo">
-                        <i class="fa-solid fa-plus me-1"></i> Nuevo Autoconsumo
+                        <i class="fa-solid fa-plus me-1"></i> Nueva salida
                     </span>
                     <span wire:loading wire:target="nuevoAutoconsumo">
                         <span class="spinner-border" style="width:1.4rem;height:1.4rem;vertical-align:middle;margin-right:.35rem;" role="status"></span>Cargando...
@@ -470,39 +488,37 @@
                 <table class="table table-hover align-middle mb-0 small">
                     <thead>
                         <tr class="encabezado_tabla_color">
-                            <th class="ps-3">#</th>
-                            <th>N° Autoconsumo</th>
-                            <th>Ubicación</th>
-                            <th>Área</th>
-                            <th>Motivo</th>
+                            <th class="ps-3">N.° de orden</th>
                             <th>Fecha</th>
+                            <th>Documento</th>
+                            <th>Motivo</th>
+                            <th class="text-center">Cód. SUNAT</th>
                             <th class="text-center">Productos</th>
+                            <th class="text-end">Costo total</th>
                             <th class="text-center">Estado</th>
-                            <th class="text-center" style="width:120px">Acciones</th>
+                            <th class="text-center" style="width:90px">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($autoconsumos as $index => $ac)
+                        @php
+                            $estadoBadge = ['registrado'=>'bg-success','anulado'=>'bg-danger'][$ac->autoconsumo_estado] ?? 'bg-secondary';
+                        @endphp
                         <tr>
-                            <td class="ps-3 text-muted fw-semibold">{{ $autoconsumos->firstItem() + $index }}</td>
-                            <td class="fw-semibold">{{ $ac->autoconsumo_numero }}</td>
-                            <td>
-                                <span class="d-block">{{ $ac->ubicacion_nombre }}</span>
-                                @if($ac->empresa_nombre)
-                                    <small class="text-muted">{{ $ac->empresa_nombre }}</small>
-                                @endif
-                            </td>
-                            <td>{{ $ac->autoconsumo_area }}</td>
-                            <td class="text-muted">{{ \Illuminate\Support\Str::limit($ac->autoconsumo_motivo, 40) ?: '—' }}</td>
+                            <td class="ps-3 fw-semibold">{{ $ac->autoconsumo_numero }}</td>
                             <td><small>{{ \Carbon\Carbon::parse($ac->autoconsumo_fecha)->format('d/m/Y') }}</small></td>
+                            <td>Guía interna</td>
+                            <td class="text-muted">{{ \Illuminate\Support\Str::limit($ac->autoconsumo_motivo, 40) ?: '—' }}</td>
+                            <td class="text-center">{{ $ac->autoconsumo_cod_sunat ?: '—' }}</td>
                             <td class="text-center">
                                 <span class="badge bg-secondary">{{ $ac->total_productos }}</span>
                             </td>
+                            <td class="text-end fw-semibold">S/ {{ number_format($ac->costo_total, 2) }}</td>
                             <td class="text-center">
-                                <span class="badge bg-success">Registrado</span>
+                                <span class="badge {{ $estadoBadge }}">{{ ucfirst($ac->autoconsumo_estado) }}</span>
                             </td>
                             <td class="text-center">
-                                <button class="btn btn-sm btn-info me-1"
+                                <button class="btn btn-sm btn-info"
                                         wire:click="verDetalle({{ $ac->id_autoconsumo }})"
                                         wire:loading.attr="disabled"
                                         wire:target="verDetalle({{ $ac->id_autoconsumo }})"
@@ -514,18 +530,6 @@
                                         <span class="spinner-border spinner-border-sm"></span>
                                     </span>
                                 </button>
-                                <a href="{{ route('logistica.autoconsumo_pdf', ['id' => $ac->id_autoconsumo]) }}"
-                                   target="_blank"
-                                   class="btn btn-sm btn-danger me-1"
-                                   title="Descargar PDF A4">
-                                    <i class="fa-solid fa-file-pdf"></i>
-                                </a>
-                                <a href="{{ route('logistica.autoconsumo_ticket', ['id' => $ac->id_autoconsumo]) }}"
-                                   target="_blank"
-                                   class="btn btn-sm btn-warning"
-                                   title="Descargar Ticket">
-                                    <i class="fa-solid fa-receipt"></i>
-                                </a>
                             </td>
                         </tr>
                         @empty

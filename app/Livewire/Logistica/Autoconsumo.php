@@ -21,7 +21,35 @@ class Autoconsumo extends Component
     public string $area          = 'Administración';
     public string $autorizacion  = '';
     public string $motivo        = '';
+    public string $codSunat      = '';
     public string $fechaEmision  = '';
+
+    // Número de orden de la guía (solo números, obligatorio)
+    public string $numeroOrden = '';
+
+    // Motivo => Código SUNAT ('' = sin código)
+    public const MOTIVOS = [
+        'Ajuste de inventario'          => '',
+        'Autoconsumo'                   => '99',
+        'Autoconsumo Mundo'             => '',
+        'Combo'                         => '',
+        'Consignación entregada'        => '04',
+        'Deterioro'                     => '',
+        'Devolución entregada'          => '06',
+        'Donación'                      => '09',
+        'Error operativo'               => '',
+        'Mercadería mojada'             => '',
+        'Merma'                         => '',
+        'Por nota de débito'            => '',
+        'Premio'                        => '08',
+        'Regularización por mal conteo' => '',
+        'Robo'                          => '',
+    ];
+
+    public function updatedMotivo(): void
+    {
+        $this->codSunat = self::MOTIVOS[$this->motivo] ?? '';
+    }
 
     // ── Búsqueda de productos ─────────────────────────────────────
     public string $buscarProducto = '';
@@ -59,7 +87,19 @@ class Autoconsumo extends Component
         $this->filtroDesde  = now()->startOfMonth()->format('Y-m-d');
         $this->filtroHasta  = now()->format('Y-m-d');
         $this->fechaEmision = now()->format('Y-m-d');
+        $this->numeroOrden  = $this->sugerirNumero();
         $this->autoResolverUbicacion();
+    }
+
+    private function sugerirNumero(): string
+    {
+        return (string) (DB::table('autoconsumo')->count() + 1);
+    }
+
+    public function updatedNumeroOrden(): void
+    {
+        // Solo dígitos
+        $this->numeroOrden = preg_replace('/\D/', '', (string) $this->numeroOrden);
     }
 
     private function autoResolverUbicacion(): void
@@ -291,6 +331,19 @@ class Autoconsumo extends Component
             $this->addError('fechaEmision', 'Ingrese la fecha de emisión.');
             return;
         }
+        if (trim($this->motivo) === '') {
+            $this->addError('motivo', 'Seleccione un motivo.');
+            return;
+        }
+        $numeroGuia = preg_replace('/\D/', '', (string) $this->numeroOrden);
+        if ($numeroGuia === '') {
+            $this->addError('numeroOrden', 'Ingrese el número de orden (solo números).');
+            return;
+        }
+        if (DB::table('autoconsumo')->where('autoconsumo_numero', $numeroGuia)->exists()) {
+            $this->addError('numeroOrden', 'Ya existe una salida con ese número de orden.');
+            return;
+        }
         if (empty($this->items)) {
             $this->addError('items', 'Agregue al menos un producto.');
             return;
@@ -334,9 +387,7 @@ class Autoconsumo extends Component
                     return;
                 }
             }
-            $numero = 'AC-' . date('Y') . '-' . str_pad(
-                DB::table('autoconsumo')->count() + 1, 5, '0', STR_PAD_LEFT
-            );
+            $numero = $numeroGuia;
 
             $idAutoconsumo = DB::table('autoconsumo')->insertGetId([
                 'autoconsumo_numero'       => $numero,
@@ -345,6 +396,7 @@ class Autoconsumo extends Component
                 'autoconsumo_area'         => $this->area,
                 'autoconsumo_autorizacion' => null,
                 'autoconsumo_motivo'       => trim($this->motivo) !== '' ? trim($this->motivo) : null,
+                'autoconsumo_cod_sunat'    => trim($this->codSunat) !== '' ? trim($this->codSunat) : null,
                 'autoconsumo_fecha'        => $this->fechaEmision,
                 'id_users'                 => auth()->user()->id_users,
                 'autoconsumo_estado'       => 'registrado',
@@ -432,6 +484,8 @@ class Autoconsumo extends Component
         $this->area          = 'Administración';
         $this->autorizacion  = '';
         $this->motivo        = '';
+        $this->codSunat      = '';
+        $this->numeroOrden   = $this->sugerirNumero();
         $this->fechaEmision  = now()->format('Y-m-d');
         $this->resetErrorBag();
         $this->autoResolverUbicacion();
@@ -542,18 +596,23 @@ class Autoconsumo extends Component
                 DB::raw("COALESCE(ea.empresa_nombrecomercial, et.empresa_nombrecomercial) as empresa_nombre"),
                 'u.nombre_users',
                 DB::raw('(SELECT COUNT(*) FROM autoconsumo_detalle WHERE id_autoconsumo = ac.id_autoconsumo) as total_productos'),
+                DB::raw('(SELECT COALESCE(SUM(detalle_cantidad * detalle_costo),0) FROM autoconsumo_detalle WHERE id_autoconsumo = ac.id_autoconsumo) as costo_total'),
             )
             ->when($this->filtroDesde, fn($q) => $q->whereDate('ac.autoconsumo_fecha', '>=', $this->filtroDesde))
             ->when($this->filtroHasta, fn($q) => $q->whereDate('ac.autoconsumo_fecha', '<=', $this->filtroHasta))
             ->orderByDesc('ac.id_autoconsumo')
             ->paginate($this->porPagina);
 
+        // Próximo número (previsualización del formulario)
+        $proximoNumero = 'AC-' . date('Y') . '-' . str_pad(DB::table('autoconsumo')->count() + 1, 5, '0', STR_PAD_LEFT);
+        $motivos = array_keys(self::MOTIVOS);
+
         return view('livewire.logistica.autoconsumo', compact(
             'almacenes', 'empresas', 'sedes',
             'autorizacionesEmpresas', 'autorizacionesPersonas',
             'revisionAutoconsumo', 'revisionItems',
             'detalleAutoconsumo', 'detalleItems',
-            'autoconsumos',
+            'autoconsumos', 'proximoNumero', 'motivos',
         ));
     }
 }
