@@ -24,8 +24,24 @@ class Autoconsumo extends Component
     public string $codSunat      = '';
     public string $fechaEmision  = '';
 
-    // Número de orden de la guía (solo números, obligatorio)
-    public string $numeroOrden = '';
+    // Cabecera de la guía
+    public string $numeroOrden = '';              // N.° de orden (solo números)
+    public string $documento   = 'Guía salida';   // Guía interna (ingreso) | Guía salida (salida)
+    public string $serie       = '0001';          // 0001 | 0002 | 0003 | 0004
+    public int    $correlativo = 1;               // se reinicia por serie
+
+    public const SERIES = ['0001', '0002', '0003', '0004'];
+
+    // El documento define la dirección del movimiento
+    private function esIngreso(): bool
+    {
+        return $this->documento === 'Guía interna';
+    }
+
+    public function updatedNumeroOrden(): void
+    {
+        $this->numeroOrden = preg_replace('/\D/', '', (string) $this->numeroOrden);
+    }
 
     // Motivo => Código SUNAT ('' = sin código)
     public const MOTIVOS = [
@@ -87,19 +103,26 @@ class Autoconsumo extends Component
         $this->filtroDesde  = now()->startOfMonth()->format('Y-m-d');
         $this->filtroHasta  = now()->format('Y-m-d');
         $this->fechaEmision = now()->format('Y-m-d');
-        $this->numeroOrden  = $this->sugerirNumero();
+        $this->correlativo  = $this->sugerirCorrelativo($this->serie);
+        $this->numeroOrden  = (string) $this->sugerirNumeroOrden();
         $this->autoResolverUbicacion();
     }
 
-    private function sugerirNumero(): string
+    private function sugerirNumeroOrden(): int
     {
-        return (string) (DB::table('autoconsumo')->count() + 1);
+        return (int) (DB::table('autoconsumo')->max('autoconsumo_orden') ?? 0) + 1;
     }
 
-    public function updatedNumeroOrden(): void
+    // Correlativo siguiente para una serie (se reinicia por serie)
+    private function sugerirCorrelativo(string $serie): int
     {
-        // Solo dígitos
-        $this->numeroOrden = preg_replace('/\D/', '', (string) $this->numeroOrden);
+        return (int) (DB::table('autoconsumo')->where('autoconsumo_serie', $serie)->max('autoconsumo_correlativo') ?? 0) + 1;
+    }
+
+    // Al cambiar la serie, se recalcula el correlativo (se reinicia por serie)
+    public function updatedSerie(): void
+    {
+        $this->correlativo = $this->sugerirCorrelativo($this->serie);
     }
 
     private function autoResolverUbicacion(): void
@@ -335,15 +358,22 @@ class Autoconsumo extends Component
             $this->addError('motivo', 'Seleccione un motivo.');
             return;
         }
-        $numeroGuia = preg_replace('/\D/', '', (string) $this->numeroOrden);
-        if ($numeroGuia === '') {
+        $numeroOrden = preg_replace('/\D/', '', (string) $this->numeroOrden);
+        if ($numeroOrden === '') {
             $this->addError('numeroOrden', 'Ingrese el número de orden (solo números).');
             return;
         }
-        if (DB::table('autoconsumo')->where('autoconsumo_numero', $numeroGuia)->exists()) {
-            $this->addError('numeroOrden', 'Ya existe una salida con ese número de orden.');
+        if (!in_array($this->documento, ['Guía interna', 'Guía salida'], true)) {
+            $this->addError('documento', 'Seleccione un documento.');
             return;
         }
+        if (!in_array($this->serie, self::SERIES, true)) {
+            $this->addError('serie', 'Seleccione una serie válida.');
+            return;
+        }
+        // Correlativo por serie (se recalcula por si cambió entre-tanto)
+        $this->correlativo = $this->sugerirCorrelativo($this->serie);
+        $numeroGuia = $this->serie . '-' . $this->correlativo;
         if (empty($this->items)) {
             $this->addError('items', 'Agregue al menos un producto.');
             return;
@@ -359,9 +389,12 @@ class Autoconsumo extends Component
         $almId = $this->almacenId();
         $tndId = $this->tiendaId();
 
+        $esIngreso = $this->esIngreso();
+
         DB::beginTransaction();
         try {
-            // Validar stock vivo con lockForUpdate (igual que Pedidos)
+            // Validar stock vivo con lockForUpdate — solo para SALIDA
+            if (!$esIngreso)
             foreach (collect($this->items)->sortBy('id_pro') as $item) {
                 $factor     = (float) ($item['pres_factor'] ?? 1.0);
                 $stockDelta = (float) $item['cantidad'] * ($factor > 0 ? $factor : 1.0);
@@ -400,19 +433,25 @@ class Autoconsumo extends Component
                 'autoconsumo_fecha'        => $this->fechaEmision,
                 'id_users'                 => auth()->user()->id_users,
                 'autoconsumo_estado'       => 'registrado',
+                'autoconsumo_tipo_mov'     => $esIngreso ? 'ingreso' : 'salida',
+                'autoconsumo_documento'    => $this->documento,
+                'autoconsumo_serie'        => $this->serie,
+                'autoconsumo_correlativo'  => $this->correlativo,
+                'autoconsumo_orden'        => (int) $numeroOrden,
                 'created_at'               => now(),
                 'updated_at'               => now(),
             ]);
 
+            $etiquetaMov = $esIngreso ? 'Ingreso' : 'Salida';
             $idMov = DB::table('movimientos_productos')->insertGetId([
                 'movimientos_productos_fecha'          => $this->fechaEmision,
                 'id_users'                             => auth()->user()->id_users,
                 'id_sucursal'                          => $tndId,
                 'id_almacen'                           => $almId,
                 'movimientos_productos_fecha_creacion' => now(),
-                'movimientos_productos_tipo'           => 2,
+                'movimientos_productos_tipo'           => $esIngreso ? 1 : 2,
                 'movimientos_productos_estado'         => 1,
-                'movimientos_productos_motivo'         => "Autoconsumo {$numero} — Área: {$this->area}" . (trim($this->motivo) !== '' ? " — Motivo: {$this->motivo}" : ''),
+                'movimientos_productos_motivo'         => "{$this->documento} {$numero} — {$etiquetaMov}" . (trim($this->motivo) !== '' ? " — Motivo: {$this->motivo}" : ''),
                 'concepto'                             => 'autoconsumo',
                 'created_at'                           => now(),
                 'updated_at'                           => now(),
@@ -447,15 +486,13 @@ class Autoconsumo extends Component
                 ]);
 
                 if ($almId) {
-                    DB::table('almacen_producto')
-                        ->where('id_almacen', $almId)
-                        ->where('id_pro', $idPro)
-                        ->decrement('ap_stock', $stockDelta, ['updated_at' => now()]);
+                    $q = DB::table('almacen_producto')->where('id_almacen', $almId)->where('id_pro', $idPro);
+                    $esIngreso ? $q->increment('ap_stock', $stockDelta, ['updated_at' => now()])
+                               : $q->decrement('ap_stock', $stockDelta, ['updated_at' => now()]);
                 } else {
-                    DB::table('producto_sucursal')
-                        ->where('id_tienda', $tndId)
-                        ->where('id_pro', $idPro)
-                        ->decrement('ps_stock', $stockDelta, ['updated_at' => now()]);
+                    $q = DB::table('producto_sucursal')->where('id_tienda', $tndId)->where('id_pro', $idPro);
+                    $esIngreso ? $q->increment('ps_stock', $stockDelta, ['updated_at' => now()])
+                               : $q->decrement('ps_stock', $stockDelta, ['updated_at' => now()]);
                 }
             }
 
@@ -485,7 +522,10 @@ class Autoconsumo extends Component
         $this->autorizacion  = '';
         $this->motivo        = '';
         $this->codSunat      = '';
-        $this->numeroOrden   = $this->sugerirNumero();
+        $this->documento     = 'Guía salida';
+        $this->serie         = '0001';
+        $this->correlativo   = $this->sugerirCorrelativo('0001');
+        $this->numeroOrden   = (string) $this->sugerirNumeroOrden();
         $this->fechaEmision  = now()->format('Y-m-d');
         $this->resetErrorBag();
         $this->autoResolverUbicacion();
@@ -604,15 +644,15 @@ class Autoconsumo extends Component
             ->paginate($this->porPagina);
 
         // Próximo número (previsualización del formulario)
-        $proximoNumero = 'AC-' . date('Y') . '-' . str_pad(DB::table('autoconsumo')->count() + 1, 5, '0', STR_PAD_LEFT);
         $motivos = array_keys(self::MOTIVOS);
+        $series  = self::SERIES;
 
         return view('livewire.logistica.autoconsumo', compact(
             'almacenes', 'empresas', 'sedes',
             'autorizacionesEmpresas', 'autorizacionesPersonas',
             'revisionAutoconsumo', 'revisionItems',
             'detalleAutoconsumo', 'detalleItems',
-            'autoconsumos', 'proximoNumero', 'motivos',
+            'autoconsumos', 'motivos', 'series',
         ));
     }
 }

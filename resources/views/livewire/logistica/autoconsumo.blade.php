@@ -55,9 +55,11 @@
                         <div class="col-12 col-md-6">
                             <div class="bg-white border rounded p-3 h-100">
                                 <h6 class="fw-bold text-muted small text-uppercase mb-3"><i class="fa-regular fa-file-lines me-1 text-primary"></i> Información del documento</h6>
-                                <div class="small mb-1"><span class="text-muted">N.° de orden:</span> <span class="fw-semibold">{{ $detalleAutoconsumo->autoconsumo_numero }}</span></div>
+                                <div class="small mb-1"><span class="text-muted">N.° de orden:</span> <span class="fw-semibold">{{ $detalleAutoconsumo->autoconsumo_orden ?? '—' }}</span></div>
+                                <div class="small mb-1"><span class="text-muted">N.° de guía:</span> <span class="fw-semibold">{{ $detalleAutoconsumo->autoconsumo_numero }}</span></div>
                                 <div class="small mb-1"><span class="text-muted">Fecha:</span> <span class="fw-semibold">{{ \Carbon\Carbon::parse($detalleAutoconsumo->autoconsumo_fecha)->format('d/m/Y') }}</span></div>
-                                <div class="small"><span class="text-muted">Documento:</span> <span class="fw-semibold">Guía interna</span></div>
+                                <div class="small mb-1"><span class="text-muted">Documento:</span> <span class="fw-semibold">{{ $detalleAutoconsumo->autoconsumo_documento ?: 'Guía interna' }}</span></div>
+                                <div class="small"><span class="text-muted">Tipo:</span> <span class="fw-semibold">{{ ucfirst($detalleAutoconsumo->autoconsumo_tipo_mov ?? 'salida') }}</span></div>
                             </div>
                         </div>
                         <div class="col-12 col-md-6">
@@ -138,20 +140,19 @@
 
             {{-- Campos del formulario --}}
             <div class="row g-3 mb-4">
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label fw-semibold">
                         <i class="fa-solid fa-hashtag me-1 text-secondary"></i>
                         Número de orden <span class="text-danger">*</span>
                     </label>
-                    <input type="text" wire:model="numeroOrden" maxlength="15"
-                           inputmode="numeric"
+                    <input type="text" wire:model="numeroOrden" maxlength="15" inputmode="numeric"
                            oninput="this.value=this.value.replace(/\D/g,'')"
                            class="form-control fw-semibold @error('numeroOrden') is-invalid @enderror"
                            placeholder="Solo números">
                     @error('numeroOrden') <div class="invalid-feedback">{{ $message }}</div> @enderror
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label fw-semibold">
                         <i class="fa-solid fa-calendar-day me-1 text-secondary"></i>
                         Fecha <span class="text-danger">*</span>
@@ -162,6 +163,39 @@
                 </div>
 
                 <div class="col-md-3">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-regular fa-file-lines me-1 text-secondary"></i>
+                        Documento <span class="text-danger">*</span>
+                    </label>
+                    <select wire:model.live="documento" class="form-select @error('documento') is-invalid @enderror">
+                        <option value="Guía salida">Guía salida (salida)</option>
+                        <option value="Guía interna">Guía interna (ingreso)</option>
+                    </select>
+                    @error('documento') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-hashtag me-1 text-secondary"></i>
+                        Serie <span class="text-danger">*</span>
+                    </label>
+                    <select wire:model.live="serie" class="form-select @error('serie') is-invalid @enderror">
+                        @foreach($series as $s)
+                            <option value="{{ $s }}">{{ $s }}</option>
+                        @endforeach
+                    </select>
+                    @error('serie') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-list-ol me-1 text-secondary"></i>
+                        Correlativo
+                    </label>
+                    <input type="text" class="form-control fw-semibold" value="{{ $correlativo }}" readonly>
+                </div>
+
+                <div class="col-md-4">
                     <label class="form-label fw-semibold">
                         <i class="fa-solid fa-comment me-1 text-secondary"></i>
                         Motivo <span class="text-danger">*</span>
@@ -489,6 +523,7 @@
                     <thead>
                         <tr class="encabezado_tabla_color">
                             <th class="ps-3">N.° de orden</th>
+                            <th class="text-center">Tipo</th>
                             <th>Fecha</th>
                             <th>Documento</th>
                             <th>Motivo</th>
@@ -505,9 +540,17 @@
                             $estadoBadge = ['registrado'=>'bg-success','anulado'=>'bg-danger'][$ac->autoconsumo_estado] ?? 'bg-secondary';
                         @endphp
                         <tr>
-                            <td class="ps-3 fw-semibold">{{ $ac->autoconsumo_numero }}</td>
+                            <td class="ps-3 fw-semibold">{{ $ac->autoconsumo_orden ?? '—' }}</td>
+                            <td class="text-center">
+                                <span class="badge {{ ($ac->autoconsumo_tipo_mov ?? 'salida') === 'ingreso' ? 'bg-primary' : 'bg-warning text-dark' }}">
+                                    {{ ucfirst($ac->autoconsumo_tipo_mov ?? 'salida') }}
+                                </span>
+                            </td>
                             <td><small>{{ \Carbon\Carbon::parse($ac->autoconsumo_fecha)->format('d/m/Y') }}</small></td>
-                            <td>Guía interna</td>
+                            <td>
+                                {{ $ac->autoconsumo_documento ?: 'Guía interna' }}
+                                <small class="text-muted d-block">{{ $ac->autoconsumo_numero }}</small>
+                            </td>
                             <td class="text-muted">{{ \Illuminate\Support\Str::limit($ac->autoconsumo_motivo, 40) ?: '—' }}</td>
                             <td class="text-center">{{ $ac->autoconsumo_cod_sunat ?: '—' }}</td>
                             <td class="text-center">
@@ -534,7 +577,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="9" class="text-center text-muted py-5">
+                            <td colspan="10" class="text-center text-muted py-5">
                                 <i class="fa-solid fa-fire-burner fa-2x mb-2 d-block opacity-25"></i>
                                 No hay autoconsumos en el período seleccionado.
                             </td>
