@@ -371,8 +371,10 @@ class Autoconsumo extends Component
             $this->addError('serie', 'Seleccione una serie válida.');
             return;
         }
-        // Correlativo por serie (se recalcula por si cambió entre-tanto)
-        $this->correlativo = $this->sugerirCorrelativo($this->serie);
+        // Correlativo por serie: en alta se recalcula; en edición se conserva
+        if (!$this->idEditando) {
+            $this->correlativo = $this->sugerirCorrelativo($this->serie);
+        }
         $numeroGuia = $this->serie . '-' . $this->correlativo;
         if (empty($this->items)) {
             $this->addError('items', 'Agregue al menos un producto.');
@@ -393,6 +395,12 @@ class Autoconsumo extends Component
 
         DB::beginTransaction();
         try {
+            // En edición: revertir el efecto anterior antes de re-aplicar
+            if ($this->idEditando) {
+                $acPrev = DB::table('autoconsumo')->where('id_autoconsumo', $this->idEditando)->first();
+                if ($acPrev) $this->revertirEfecto($acPrev);
+            }
+
             // Validar stock vivo con lockForUpdate — solo para SALIDA
             if (!$esIngreso)
             foreach (collect($this->items)->sortBy('id_pro') as $item) {
@@ -422,25 +430,33 @@ class Autoconsumo extends Component
             }
             $numero = $numeroGuia;
 
-            $idAutoconsumo = DB::table('autoconsumo')->insertGetId([
+            $datosAc = [
                 'autoconsumo_numero'       => $numero,
                 'id_almacen'               => $almId,
                 'id_tienda'                => $tndId,
                 'autoconsumo_area'         => $this->area,
-                'autoconsumo_autorizacion' => null,
                 'autoconsumo_motivo'       => trim($this->motivo) !== '' ? trim($this->motivo) : null,
                 'autoconsumo_cod_sunat'    => trim($this->codSunat) !== '' ? trim($this->codSunat) : null,
                 'autoconsumo_fecha'        => $this->fechaEmision,
-                'id_users'                 => auth()->user()->id_users,
-                'autoconsumo_estado'       => 'registrado',
                 'autoconsumo_tipo_mov'     => $esIngreso ? 'ingreso' : 'salida',
                 'autoconsumo_documento'    => $this->documento,
                 'autoconsumo_serie'        => $this->serie,
                 'autoconsumo_correlativo'  => $this->correlativo,
                 'autoconsumo_orden'        => (int) $numeroOrden,
-                'created_at'               => now(),
                 'updated_at'               => now(),
-            ]);
+            ];
+
+            if ($this->idEditando) {
+                DB::table('autoconsumo')->where('id_autoconsumo', $this->idEditando)->update($datosAc);
+                $idAutoconsumo = $this->idEditando;
+            } else {
+                $idAutoconsumo = DB::table('autoconsumo')->insertGetId($datosAc + [
+                    'autoconsumo_autorizacion' => null,
+                    'id_users'                 => auth()->user()->id_users,
+                    'autoconsumo_estado'       => 'registrado',
+                    'created_at'               => now(),
+                ]);
+            }
 
             $etiquetaMov = $esIngreso ? 'Ingreso' : 'Salida';
             $idMov = DB::table('movimientos_productos')->insertGetId([
@@ -508,6 +524,134 @@ class Autoconsumo extends Component
         }
     }
 
+    // ── Eliminar (DELETE real + reversión de stock + quita del kardex) ──
+    public ?int $idEliminar = null;
+
+    public function confirmarEliminar(int $id): void
+    {
+        $this->idEliminar = $id;
+        $this->dispatch('abrirModalEliminarAutoconsumo');
+    }
+
+    public function eliminar(): void
+    {
+        if (!$this->idEliminar) return;
+
+        if (!auth()->user()->can('autoconsumo.eliminar')) {
+            session()->flash('error', 'No tiene permiso para eliminar.');
+            return;
+        }
+
+        DB::beginTransaction();
+        try {
+            $ac = DB::table('autoconsumo')->where('id_autoconsumo', $this->idEliminar)->first();
+            if (!$ac) { DB::rollBack(); return; }
+
+            // Revierte stock + borra movimiento del kardex + borra el detalle
+            $this->revertirEfecto($ac);
+            // Elimina la guía
+            DB::table('autoconsumo')->where('id_autoconsumo', $this->idEliminar)->delete();
+
+            DB::commit();
+            $this->idEliminar = null;
+            $this->dispatch('cerrarModalEliminarAutoconsumo');
+            session()->flash('success', 'Registro eliminado y stock revertido correctamente.');
+            $this->resetPage();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->logs->insertarLog($e);
+            session()->flash('error', 'Error al eliminar el registro.');
+        }
+    }
+
+    /**
+     * Revierte el efecto de una guía: devuelve/quita stock y borra su movimiento
+     * del kardex y sus líneas de detalle. NO borra la fila de autoconsumo.
+     */
+    private function revertirEfecto(object $ac): void
+    {
+        $esIngreso = ($ac->autoconsumo_tipo_mov ?? 'salida') === 'ingreso';
+        $almId = $ac->id_almacen;
+        $tndId = $ac->id_tienda;
+
+        foreach (DB::table('autoconsumo_detalle')->where('id_autoconsumo', $ac->id_autoconsumo)->get() as $d) {
+            $cant  = (float) $d->detalle_cantidad;
+            $idPro = (int)   $d->id_pro;
+            if ($almId) {
+                $q = DB::table('almacen_producto')->where('id_almacen', $almId)->where('id_pro', $idPro);
+                $esIngreso ? $q->decrement('ap_stock', $cant, ['updated_at' => now()])
+                           : $q->increment('ap_stock', $cant, ['updated_at' => now()]);
+            } else {
+                $q = DB::table('producto_sucursal')->where('id_tienda', $tndId)->where('id_pro', $idPro);
+                $esIngreso ? $q->decrement('ps_stock', $cant, ['updated_at' => now()])
+                           : $q->increment('ps_stock', $cant, ['updated_at' => now()]);
+            }
+        }
+
+        $idsMov = DB::table('movimientos_productos_detalle')
+            ->where('tipo_referencia', 'autoconsumo')->where('id_referencia', $ac->id_autoconsumo)
+            ->pluck('id_movimientos_productos')->unique()->all();
+        DB::table('movimientos_productos_detalle')
+            ->where('tipo_referencia', 'autoconsumo')->where('id_referencia', $ac->id_autoconsumo)->delete();
+        if (!empty($idsMov)) {
+            DB::table('movimientos_productos')->whereIn('id_movimientos_productos', $idsMov)->delete();
+        }
+        DB::table('autoconsumo_detalle')->where('id_autoconsumo', $ac->id_autoconsumo)->delete();
+    }
+
+    // ── Editar (carga la guía en el formulario) ───────────────────
+    public ?int $idEditando = null;
+
+    public function editar(int $id): void
+    {
+        if (!auth()->user()->can('autoconsumo.actualizar')) {
+            session()->flash('error', 'No tiene permiso para editar.');
+            return;
+        }
+
+        $ac = DB::table('autoconsumo')->where('id_autoconsumo', $id)->first();
+        if (!$ac) return;
+
+        $this->limpiarFormulario();
+        $this->idEditando  = $id;
+        $this->numeroOrden = (string) ($ac->autoconsumo_orden ?? '');
+        $this->documento   = $ac->autoconsumo_documento ?: 'Guía salida';
+        $this->serie       = $ac->autoconsumo_serie ?: '0001';
+        $this->correlativo = (int) ($ac->autoconsumo_correlativo ?? 1);
+        $this->motivo      = $ac->autoconsumo_motivo ?: '';
+        $this->codSunat    = $ac->autoconsumo_cod_sunat ?: (self::MOTIVOS[$ac->autoconsumo_motivo] ?? '');
+        $this->fechaEmision = \Carbon\Carbon::parse($ac->autoconsumo_fecha)->format('Y-m-d');
+        $this->area        = $ac->autoconsumo_area ?: 'Administración';
+
+        // Ubicación
+        if ($ac->id_almacen) {
+            $this->ubicacionKey = 'almacen_' . $ac->id_almacen;
+            $this->idTienda = 0;
+        } else {
+            $emp = DB::table('tiendas')->where('id_tienda', $ac->id_tienda)->value('id_empresa');
+            $this->ubicacionKey = 'empresa_' . $emp;
+            $this->idTienda = (int) $ac->id_tienda;
+        }
+
+        // Ítems (cantidad en unidades base; factor 1)
+        $this->items = DB::table('autoconsumo_detalle as d')
+            ->join('productos as p', 'p.id_pro', '=', 'd.id_pro')
+            ->where('d.id_autoconsumo', $id)
+            ->get()->map(fn($d) => [
+                'id_pro'       => (int) $d->id_pro,
+                'nombre'       => $d->pro_nombre,
+                'codigo'       => $d->pro_codigo,
+                'stock_raw'    => 0,
+                'stock_actual' => 0,
+                'costo'        => (float) $d->detalle_costo,
+                'cantidad'     => (string) (float) $d->detalle_cantidad,
+                'pres_nombre'  => '',
+                'pres_factor'  => 1.0,
+            ])->toArray();
+
+        $this->vista = 'nuevo';
+    }
+
     // ── Ver detalle ───────────────────────────────────────────────
     public function verDetalle(int $id): void
     {
@@ -522,6 +666,7 @@ class Autoconsumo extends Component
         $this->autorizacion  = '';
         $this->motivo        = '';
         $this->codSunat      = '';
+        $this->idEditando    = null;
         $this->documento     = 'Guía salida';
         $this->serie         = '0001';
         $this->correlativo   = $this->sugerirCorrelativo('0001');

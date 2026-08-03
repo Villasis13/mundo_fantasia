@@ -129,7 +129,7 @@
             <div class="d-flex align-items-center justify-content-between">
                 <h5 class="mb-0 fw-bold">
                     <i class="fa-solid fa-dolly me-2 text-warning"></i>
-                    Nueva salida
+                    {{ $idEditando ? 'Editar registro' : 'Nueva salida' }}
                 </h5>
                 <button class="btn btn-sm btn-outline-secondary" wire:click="volverHistorial">
                     <i class="fa-solid fa-arrow-left me-1"></i> Volver
@@ -351,7 +351,7 @@
                         wire:loading.attr="disabled" wire:target="guardar"
                         {{ (!$ubicOk || empty($items)) ? 'disabled' : '' }}>
                     <span wire:loading.remove wire:target="guardar">
-                        <i class="fa-solid fa-floppy-disk me-1"></i> Registrar salida
+                        <i class="fa-solid fa-floppy-disk me-1"></i> {{ $idEditando ? 'Actualizar' : 'Registrar salida' }}
                     </span>
                     <span wire:loading wire:target="guardar">
                         <span class="spinner-border" style="width:1.4rem;height:1.4rem;vertical-align:middle;" role="status"></span> Guardando...
@@ -560,7 +560,7 @@
                             <td class="text-center">
                                 <span class="badge {{ $estadoBadge }}">{{ ucfirst($ac->autoconsumo_estado) }}</span>
                             </td>
-                            <td class="text-center">
+                            <td class="text-center text-nowrap">
                                 <button class="btn btn-sm btn-info"
                                         wire:click="verDetalle({{ $ac->id_autoconsumo }})"
                                         wire:loading.attr="disabled"
@@ -573,6 +573,16 @@
                                         <span class="spinner-border spinner-border-sm"></span>
                                     </span>
                                 </button>
+                                @can('autoconsumo.actualizar')
+                                <button class="btn btn-sm btn-warning" wire:click="editar({{ $ac->id_autoconsumo }})" title="Editar">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                                @endcan
+                                @can('autoconsumo.eliminar')
+                                <button class="btn btn-sm btn-danger" wire:click="confirmarEliminar({{ $ac->id_autoconsumo }})" title="Eliminar">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                                @endcan
                             </td>
                         </tr>
                         @empty
@@ -643,6 +653,28 @@
         </div>
     </div>
 
+    {{-- ══════════ MODAL — Confirmar eliminación ══════════ --}}
+    <div class="modal fade" id="modalEliminarAutoconsumo" wire:ignore.self tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:420px;">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-body text-center px-4 pt-4 pb-3">
+                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger mb-3" style="width:70px;height:70px;">
+                        <i class="fa-solid fa-trash text-white" style="font-size:1.8rem;"></i>
+                    </div>
+                    <h6 class="fw-bold mb-1">¿Estás seguro de eliminar este registro?</h6>
+                </div>
+                <div class="modal-footer border-0 justify-content-center pb-4">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger fw-semibold" wire:click="eliminar"
+                            wire:loading.attr="disabled" wire:target="eliminar">
+                        <span wire:loading.remove wire:target="eliminar"><i class="fa-solid fa-trash me-1"></i> Eliminar</span>
+                        <span wire:loading wire:target="eliminar"><span class="spinner-border spinner-border-sm me-1"></span> Eliminando...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('livewire:init', () => {
             Livewire.on('abrirModalDetalle', () => {
@@ -653,6 +685,14 @@
             });
             Livewire.on('cerrarModalPresentacionesAutoconsumo', () => {
                 const el = document.getElementById('modalPresentacionesAutoconsumo');
+                const modal = bootstrap.Modal.getInstance(el);
+                if (modal) modal.hide();
+            });
+            Livewire.on('abrirModalEliminarAutoconsumo', () => {
+                new bootstrap.Modal(document.getElementById('modalEliminarAutoconsumo')).show();
+            });
+            Livewire.on('cerrarModalEliminarAutoconsumo', () => {
+                const el = document.getElementById('modalEliminarAutoconsumo');
                 const modal = bootstrap.Modal.getInstance(el);
                 if (modal) modal.hide();
             });
