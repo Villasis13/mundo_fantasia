@@ -499,6 +499,13 @@ public function updatedUbicacionKey(): void
                 ->get(['v.id_venta', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_tipo', 'c.cliente_razonsocial', 'c.cliente_numero'])
                 ->keyBy('id_venta');
 
+        // Guía de control interno (serie/correlativo desde autoconsumo)
+        $autoIds = $movimientos->where('tipo_referencia', 'autoconsumo')->pluck('id_referencia')->filter()->unique()->all();
+        $autoDocs = empty($autoIds) ? collect()
+            : DB::table('autoconsumo')->whereIn('id_autoconsumo', $autoIds)
+                ->get(['id_autoconsumo', 'autoconsumo_serie', 'autoconsumo_correlativo'])
+                ->keyBy('id_autoconsumo');
+
         $totalEntradaCant = $totalEntradaValor = $totalSalidaCant = $totalSalidaValor = 0.0;
         $lineas = [];
         foreach ($movimientos as $mov) {
@@ -523,6 +530,10 @@ public function updatedUbicacionKey(): void
                 $numero = (string) ($v->venta_correlativo ?? $numero);
                 $clienteProveedor = trim(($v->cliente_razonsocial ?? '') . (($v->cliente_numero ?? '') !== '' ? ' - ' . $v->cliente_numero : ''), ' -');
                 $tdoc = self::tdocTexto($v->venta_tipo ?? '');
+            } elseif ($mov->tipo_referencia === 'autoconsumo' && isset($autoDocs[$mov->id_referencia])) {
+                $g = $autoDocs[$mov->id_referencia];
+                $serie  = (string) ($g->autoconsumo_serie ?? '');
+                $numero = (string) ($g->autoconsumo_correlativo ?? $numero);
             }
 
             $base = [

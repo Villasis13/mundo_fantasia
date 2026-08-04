@@ -1691,7 +1691,7 @@ class LogisticaController extends Controller
             $sheet->setTitle('Consolidado');
 
             $sheet->mergeCells('A1:K1');
-            $sheet->setCellValue('A1', 'Guía de Control Interno de Salidas — Consolidado');
+            $sheet->setCellValue('A1', 'Guía de Control Interno — Consolidado');
             $sheet->getStyle('A1')->applyFromArray(['font' => ['bold' => true, 'size' => 14, 'color' => ['argb' => 'FF1E3A5F']], 'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
 
             $headers = ['N.° Orden', 'N.° Guía', 'Tipo', 'Documento', 'Fecha', 'Motivo', 'Cód. SUNAT', 'Productos', 'Costo Total', 'Estado', 'Registrado por'];
@@ -1717,7 +1717,7 @@ class LogisticaController extends Controller
             $sheet->getStyle('A4:K' . max(4, $r - 1))->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['argb' => 'FFD0D0D0']]]]);
             foreach (range('A', 'K') as $c) $sheet->getColumnDimension($c)->setAutoSize(true);
 
-            $file = 'salidas_consolidado_' . now()->format('Ymd_His') . '.xlsx';
+            $file = 'guia_control_interno_consolidado_' . now()->format('Ymd_His') . '.xlsx';
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             header("Content-Disposition: attachment; filename=\"{$file}\"");
             header('Cache-Control: max-age=0');
@@ -1747,7 +1747,7 @@ class LogisticaController extends Controller
             $sheet->setTitle('Detallado');
 
             $sheet->mergeCells('A1:L1');
-            $sheet->setCellValue('A1', 'Guía de Control Interno de Salidas — Detallado');
+            $sheet->setCellValue('A1', 'Guía de Control Interno — Detallado');
             $sheet->getStyle('A1')->applyFromArray(['font' => ['bold' => true, 'size' => 14, 'color' => ['argb' => 'FF1E3A5F']], 'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
 
             $headers = ['N.° Orden', 'N.° Guía', 'Tipo', 'Documento', 'Fecha', 'Motivo', 'Cód. SUNAT', 'Código', 'Producto', 'Cantidad', 'Costo Unit.', 'Total'];
@@ -1775,7 +1775,7 @@ class LogisticaController extends Controller
             $sheet->getStyle('A4:L' . max(4, $r - 1))->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['argb' => 'FFD0D0D0']]]]);
             foreach (range('A', 'L') as $c) $sheet->getColumnDimension($c)->setAutoSize(true);
 
-            $file = 'salidas_detallado_' . now()->format('Ymd_His') . '.xlsx';
+            $file = 'guia_control_interno_detallado_' . now()->format('Ymd_His') . '.xlsx';
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
             header("Content-Disposition: attachment; filename=\"{$file}\"");
             header('Cache-Control: max-age=0');
@@ -3307,6 +3307,13 @@ class LogisticaController extends Controller
                 ->get(['v.id_venta', 'v.venta_serie', 'v.venta_correlativo', 'v.venta_tipo', 'c.cliente_razonsocial', 'c.cliente_numero'])
                 ->keyBy('id_venta');
 
+        // Guía de control interno (serie/correlativo desde autoconsumo)
+        $autoIds = $movimientos->where('tipo_referencia', 'autoconsumo')->pluck('id_referencia')->filter()->unique()->all();
+        $autoDocs = empty($autoIds) ? collect()
+            : \Illuminate\Support\Facades\DB::table('autoconsumo')->whereIn('id_autoconsumo', $autoIds)
+                ->get(['id_autoconsumo', 'autoconsumo_serie', 'autoconsumo_correlativo'])
+                ->keyBy('id_autoconsumo');
+
         $totalECant = $totalEValor = $totalSCant = $totalSValor = 0.0;
         $lineas = [];
         foreach ($movimientos as $mov) {
@@ -3330,6 +3337,10 @@ class LogisticaController extends Controller
                 $numero = (string) ($v->venta_correlativo ?? $numero);
                 $clienteProveedor = trim(($v->cliente_razonsocial ?? '') . (($v->cliente_numero ?? '') !== '' ? ' - ' . $v->cliente_numero : ''), ' -');
                 $tdoc = self::tdocTexto($v->venta_tipo ?? '');
+            } elseif ($mov->tipo_referencia === 'autoconsumo' && isset($autoDocs[$mov->id_referencia])) {
+                $g = $autoDocs[$mov->id_referencia];
+                $serie  = (string) ($g->autoconsumo_serie ?? '');
+                $numero = (string) ($g->autoconsumo_correlativo ?? $numero);
             }
 
             if ((int)$mov->tipo === 1) {

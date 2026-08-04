@@ -410,7 +410,7 @@
             <div class="alert alert-success d-flex gap-2 align-items-center py-2 mb-3">
                 <i class="fa-solid fa-circle-check flex-shrink-0"></i>
                 <div>
-                    El autoconsumo fue registrado correctamente y el stock fue actualizado.
+                    La guía de control interno fue guardada correctamente y el stock fue actualizado.
                     El movimiento es visible en el <strong>Kardex Valorizado</strong>.
                 </div>
             </div>
