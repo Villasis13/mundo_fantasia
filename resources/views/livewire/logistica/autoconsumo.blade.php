@@ -129,7 +129,7 @@
             <div class="d-flex align-items-center justify-content-between">
                 <h5 class="mb-0 fw-bold">
                     <i class="fa-solid fa-dolly me-2 text-warning"></i>
-                    {{ $idEditando ? 'Editar registro' : 'Nueva salida' }}
+                    {{ $idEditando ? 'Editar guía interna' : 'Nueva guía interna' }}
                 </h5>
                 <button class="btn btn-sm btn-outline-secondary" wire:click="volverHistorial">
                     <i class="fa-solid fa-arrow-left me-1"></i> Volver
@@ -167,11 +167,21 @@
                         <i class="fa-regular fa-file-lines me-1 text-secondary"></i>
                         Documento <span class="text-danger">*</span>
                     </label>
-                    <select wire:model.live="documento" class="form-select @error('documento') is-invalid @enderror">
-                        <option value="Guía salida">Guía salida (salida)</option>
-                        <option value="Guía interna">Guía interna (ingreso)</option>
+                    <select wire:model="documento" class="form-select">
+                        <option value="Guía interna">Guía interna</option>
                     </select>
-                    @error('documento') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-right-left me-1 text-secondary"></i>
+                        Tipo <span class="text-danger">*</span>
+                    </label>
+                    <select wire:model.live="tipoMov" class="form-select @error('tipoMov') is-invalid @enderror">
+                        <option value="salida">Salida</option>
+                        <option value="ingreso">Ingreso</option>
+                    </select>
+                    @error('tipoMov') <div class="invalid-feedback">{{ $message }}</div> @enderror
                 </div>
 
                 <div class="col-md-2">
@@ -200,13 +210,18 @@
                         <i class="fa-solid fa-comment me-1 text-secondary"></i>
                         Motivo <span class="text-danger">*</span>
                     </label>
-                    <select wire:model.live="motivo" class="form-select @error('motivo') is-invalid @enderror">
-                        <option value="">— Seleccione motivo —</option>
-                        @foreach($motivos as $m)
-                            <option value="{{ $m }}">{{ $m }}</option>
-                        @endforeach
-                    </select>
-                    @error('motivo') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    <div class="input-group">
+                        <select wire:model.live="motivo" class="form-select @error('motivo') is-invalid @enderror">
+                            <option value="">— Seleccione motivo —</option>
+                            @foreach($motivos as $m)
+                                <option value="{{ $m->id_motivo_guia }}">{{ $m->motivo_guia_concepto }}</option>
+                            @endforeach
+                        </select>
+                        <button type="button" class="btn btn-outline-primary" wire:click="abrirModalMotivos" title="Gestionar motivos">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                        @error('motivo') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                    </div>
                 </div>
 
                 <div class="col-md-2">
@@ -351,7 +366,7 @@
                         wire:loading.attr="disabled" wire:target="guardar"
                         {{ (!$ubicOk || empty($items)) ? 'disabled' : '' }}>
                     <span wire:loading.remove wire:target="guardar">
-                        <i class="fa-solid fa-floppy-disk me-1"></i> {{ $idEditando ? 'Actualizar' : 'Registrar salida' }}
+                        <i class="fa-solid fa-floppy-disk me-1"></i> {{ $idEditando ? 'Actualizar' : 'Registrar guía interna' }}
                     </span>
                     <span wire:loading wire:target="guardar">
                         <span class="spinner-border" style="width:1.4rem;height:1.4rem;vertical-align:middle;" role="status"></span> Guardando...
@@ -477,7 +492,7 @@
                 <div>
                     <h5 class="mb-0 fw-bold">
                         <i class="fa-solid fa-dolly me-2 text-warning"></i>
-                        Guía de Control Interno de Salidas
+                        Guía de Control Interno
                     </h5>
                     <small class="text-muted">Historial de salidas internas.</small>
                 </div>
@@ -494,7 +509,7 @@
                     <button class="btn btn-warning fw-semibold text-dark" wire:click="nuevoAutoconsumo"
                             wire:loading.attr="disabled" wire:target="nuevoAutoconsumo">
                         <span wire:loading.remove wire:target="nuevoAutoconsumo">
-                            <i class="fa-solid fa-plus me-1"></i> Nueva salida
+                            <i class="fa-solid fa-plus me-1"></i> Nueva guía interna
                         </span>
                         <span wire:loading wire:target="nuevoAutoconsumo">
                             <span class="spinner-border" style="width:1.4rem;height:1.4rem;vertical-align:middle;margin-right:.35rem;" role="status"></span>Cargando...
@@ -685,8 +700,89 @@
         </div>
     </div>
 
+    {{-- ══════════ MODAL — Gestión de Motivos (CRUD) ══════════ --}}
+    <div class="modal fade" id="modalMotivos" wire:ignore.self tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-tags me-2 text-primary"></i>Gestión de motivos</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" wire:click="resetMotivoForm"></button>
+                </div>
+                <div class="modal-body">
+                    {{-- Formulario crear/editar --}}
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-semibold mb-1">Motivo <span class="text-danger">*</span></label>
+                            <input type="text" wire:model="mgConcepto" class="form-control form-control-sm @error('mgConcepto') is-invalid @enderror" placeholder="Nombre del motivo">
+                            @error('mgConcepto') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small fw-semibold mb-1">Cód. SUNAT</label>
+                            <input type="text" wire:model="mgCodigo" maxlength="10" class="form-control form-control-sm" placeholder="Opcional">
+                        </div>
+                        <div class="col-6 col-md-3 d-flex gap-1">
+                            <button type="button" class="btn btn-primary btn-sm flex-grow-1" wire:click="guardarMotivo">
+                                <i class="fa-solid {{ $mgEditId ? 'fa-pen' : 'fa-plus' }} me-1"></i>{{ $mgEditId ? 'Actualizar' : 'Agregar' }}
+                            </button>
+                            @if($mgEditId)
+                            <button type="button" class="btn btn-light btn-sm" wire:click="resetMotivoForm" title="Cancelar edición">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- Listado --}}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Motivo</th>
+                                    <th class="text-center" style="width:110px;">Cód. SUNAT</th>
+                                    <th class="text-center" style="width:100px;">Estado</th>
+                                    <th class="text-center" style="width:120px;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($motivosTodos as $mt)
+                                <tr class="{{ $mt->motivo_guia_estado ? '' : 'text-muted' }}">
+                                    <td>{{ $mt->motivo_guia_concepto }}</td>
+                                    <td class="text-center">{{ $mt->motivo_guia_codigo !== '' ? $mt->motivo_guia_codigo : '—' }}</td>
+                                    <td class="text-center">
+                                        <span class="badge {{ $mt->motivo_guia_estado ? 'bg-success' : 'bg-secondary' }}">
+                                            {{ $mt->motivo_guia_estado ? 'Activo' : 'Inactivo' }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-sm btn-warning" wire:click="editarMotivo({{ $mt->id_motivo_guia }})" title="Editar">
+                                            <i class="fa-solid fa-pen"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm {{ $mt->motivo_guia_estado ? 'btn-outline-danger' : 'btn-outline-success' }}"
+                                                wire:click="toggleMotivoEstado({{ $mt->id_motivo_guia }})"
+                                                title="{{ $mt->motivo_guia_estado ? 'Deshabilitar' : 'Habilitar' }}">
+                                            <i class="fa-solid {{ $mt->motivo_guia_estado ? 'fa-ban' : 'fa-check' }}"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr><td colspan="4" class="text-center text-muted py-3">Sin motivos registrados.</td></tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" wire:click="resetMotivoForm">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.addEventListener('livewire:init', () => {
+            Livewire.on('abrirModalMotivos', () => {
+                new bootstrap.Modal(document.getElementById('modalMotivos')).show();
+            });
             Livewire.on('abrirModalDetalle', () => {
                 new bootstrap.Modal(document.getElementById('modalDetalleAutoconsumo')).show();
             });

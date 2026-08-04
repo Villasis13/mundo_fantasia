@@ -26,16 +26,17 @@ class Autoconsumo extends Component
 
     // Cabecera de la guía
     public string $numeroOrden = '';              // N.° de orden (solo números)
-    public string $documento   = 'Guía salida';   // Guía interna (ingreso) | Guía salida (salida)
+    public string $documento   = 'Guía interna';  // Documento fijo
+    public string $tipoMov     = 'salida';        // salida | ingreso (define la dirección)
     public string $serie       = '0001';          // 0001 | 0002 | 0003 | 0004
     public int    $correlativo = 1;               // se reinicia por serie
 
     public const SERIES = ['0001', '0002', '0003', '0004'];
 
-    // El documento define la dirección del movimiento
+    // El tipo define la dirección del movimiento
     private function esIngreso(): bool
     {
-        return $this->documento === 'Guía interna';
+        return $this->tipoMov === 'ingreso';
     }
 
     public function updatedNumeroOrden(): void
@@ -43,28 +44,81 @@ class Autoconsumo extends Component
         $this->numeroOrden = preg_replace('/\D/', '', (string) $this->numeroOrden);
     }
 
-    // Motivo => Código SUNAT ('' = sin código)
-    public const MOTIVOS = [
-        'Ajuste de inventario'          => '',
-        'Autoconsumo'                   => '99',
-        'Autoconsumo Mundo'             => '',
-        'Combo'                         => '',
-        'Consignación entregada'        => '04',
-        'Deterioro'                     => '',
-        'Devolución entregada'          => '06',
-        'Donación'                      => '09',
-        'Error operativo'               => '',
-        'Mercadería mojada'             => '',
-        'Merma'                         => '',
-        'Por nota de débito'            => '',
-        'Premio'                        => '08',
-        'Regularización por mal conteo' => '',
-        'Robo'                          => '',
-    ];
-
     public function updatedMotivo(): void
     {
-        $this->codSunat = self::MOTIVOS[$this->motivo] ?? '';
+        $m = \App\Models\MotivoGuia::find($this->motivo);
+        $this->codSunat = $m ? (string) ($m->motivo_guia_codigo ?? '') : '';
+    }
+
+    // ── CRUD de Motivos (modal) ───────────────────────────────────
+    public string $mgConcepto = '';
+    public string $mgCodigo   = '';
+    public ?int   $mgEditId   = null;
+
+    public function abrirModalMotivos(): void
+    {
+        $this->resetMotivoForm();
+        $this->dispatch('abrirModalMotivos');
+    }
+
+    public function resetMotivoForm(): void
+    {
+        $this->mgConcepto = '';
+        $this->mgCodigo   = '';
+        $this->mgEditId   = null;
+        $this->resetErrorBag(['mgConcepto', 'mgCodigo']);
+    }
+
+    public function guardarMotivo(): void
+    {
+        $concepto = trim($this->mgConcepto);
+        if ($concepto === '') {
+            $this->addError('mgConcepto', 'Ingrese el motivo.');
+            return;
+        }
+        // Evitar duplicados por concepto
+        $existe = \App\Models\MotivoGuia::where('motivo_guia_concepto', $concepto)
+            ->when($this->mgEditId, fn($q) => $q->where('id_motivo_guia', '!=', $this->mgEditId))
+            ->exists();
+        if ($existe) {
+            $this->addError('mgConcepto', 'Ya existe un motivo con ese nombre.');
+            return;
+        }
+
+        if ($this->mgEditId) {
+            \App\Models\MotivoGuia::where('id_motivo_guia', $this->mgEditId)->update([
+                'motivo_guia_concepto' => $concepto,
+                'motivo_guia_codigo'   => trim($this->mgCodigo),
+                'updated_at'           => now(),
+            ]);
+        } else {
+            \App\Models\MotivoGuia::create([
+                'id_users'              => auth()->user()->id_users,
+                'motivo_guia_concepto'  => $concepto,
+                'motivo_guia_codigo'    => trim($this->mgCodigo),
+                'motivo_guia_microtime' => (string) round(microtime(true) * 1000),
+                'motivo_guia_estado'    => 1,
+            ]);
+        }
+        $this->resetMotivoForm();
+    }
+
+    public function editarMotivo(int $id): void
+    {
+        $m = \App\Models\MotivoGuia::find($id);
+        if (!$m) return;
+        $this->mgEditId   = $id;
+        $this->mgConcepto = $m->motivo_guia_concepto;
+        $this->mgCodigo   = (string) ($m->motivo_guia_codigo ?? '');
+        $this->resetErrorBag(['mgConcepto', 'mgCodigo']);
+    }
+
+    public function toggleMotivoEstado(int $id): void
+    {
+        $m = \App\Models\MotivoGuia::find($id);
+        if (!$m) return;
+        \App\Models\MotivoGuia::where('id_motivo_guia', $id)
+            ->update(['motivo_guia_estado' => $m->motivo_guia_estado ? 0 : 1, 'updated_at' => now()]);
     }
 
     // ── Búsqueda de productos ─────────────────────────────────────
@@ -358,13 +412,19 @@ class Autoconsumo extends Component
             $this->addError('motivo', 'Seleccione un motivo.');
             return;
         }
+        $motivoRow = \App\Models\MotivoGuia::find($this->motivo);
+        if (!$motivoRow) {
+            $this->addError('motivo', 'El motivo seleccionado no es válido.');
+            return;
+        }
         $numeroOrden = preg_replace('/\D/', '', (string) $this->numeroOrden);
         if ($numeroOrden === '') {
             $this->addError('numeroOrden', 'Ingrese el número de orden (solo números).');
             return;
         }
-        if (!in_array($this->documento, ['Guía interna', 'Guía salida'], true)) {
-            $this->addError('documento', 'Seleccione un documento.');
+        $this->documento = 'Guía interna';
+        if (!in_array($this->tipoMov, ['salida', 'ingreso'], true)) {
+            $this->addError('tipoMov', 'Seleccione el tipo de movimiento.');
             return;
         }
         if (!in_array($this->serie, self::SERIES, true)) {
@@ -434,9 +494,10 @@ class Autoconsumo extends Component
                 'autoconsumo_numero'       => $numero,
                 'id_almacen'               => $almId,
                 'id_tienda'                => $tndId,
+                'id_motivo_guia'           => (int) $motivoRow->id_motivo_guia,
                 'autoconsumo_area'         => $this->area,
-                'autoconsumo_motivo'       => trim($this->motivo) !== '' ? trim($this->motivo) : null,
-                'autoconsumo_cod_sunat'    => trim($this->codSunat) !== '' ? trim($this->codSunat) : null,
+                'autoconsumo_motivo'       => $motivoRow->motivo_guia_concepto,
+                'autoconsumo_cod_sunat'    => trim((string) $motivoRow->motivo_guia_codigo) !== '' ? $motivoRow->motivo_guia_codigo : null,
                 'autoconsumo_fecha'        => $this->fechaEmision,
                 'autoconsumo_tipo_mov'     => $esIngreso ? 'ingreso' : 'salida',
                 'autoconsumo_documento'    => $this->documento,
@@ -467,7 +528,7 @@ class Autoconsumo extends Component
                 'movimientos_productos_fecha_creacion' => now(),
                 'movimientos_productos_tipo'           => $esIngreso ? 1 : 2,
                 'movimientos_productos_estado'         => 1,
-                'movimientos_productos_motivo'         => "{$this->documento} {$numero} — {$etiquetaMov}" . (trim($this->motivo) !== '' ? " — Motivo: {$this->motivo}" : ''),
+                'movimientos_productos_motivo'         => "{$this->documento} {$numero} — {$etiquetaMov} — Motivo: {$motivoRow->motivo_guia_concepto}",
                 'concepto'                             => 'autoconsumo',
                 'created_at'                           => now(),
                 'updated_at'                           => now(),
@@ -615,11 +676,12 @@ class Autoconsumo extends Component
         $this->limpiarFormulario();
         $this->idEditando  = $id;
         $this->numeroOrden = (string) ($ac->autoconsumo_orden ?? '');
-        $this->documento   = $ac->autoconsumo_documento ?: 'Guía salida';
+        $this->documento   = 'Guía interna';
+        $this->tipoMov     = $ac->autoconsumo_tipo_mov ?: 'salida';
         $this->serie       = $ac->autoconsumo_serie ?: '0001';
         $this->correlativo = (int) ($ac->autoconsumo_correlativo ?? 1);
-        $this->motivo      = $ac->autoconsumo_motivo ?: '';
-        $this->codSunat    = $ac->autoconsumo_cod_sunat ?: (self::MOTIVOS[$ac->autoconsumo_motivo] ?? '');
+        $this->motivo      = (string) ($ac->id_motivo_guia ?? '');
+        $this->codSunat    = $ac->autoconsumo_cod_sunat ?: '';
         $this->fechaEmision = \Carbon\Carbon::parse($ac->autoconsumo_fecha)->format('Y-m-d');
         $this->area        = $ac->autoconsumo_area ?: 'Administración';
 
@@ -667,7 +729,8 @@ class Autoconsumo extends Component
         $this->motivo        = '';
         $this->codSunat      = '';
         $this->idEditando    = null;
-        $this->documento     = 'Guía salida';
+        $this->documento     = 'Guía interna';
+        $this->tipoMov       = 'salida';
         $this->serie         = '0001';
         $this->correlativo   = $this->sugerirCorrelativo('0001');
         $this->numeroOrden   = (string) $this->sugerirNumeroOrden();
@@ -789,15 +852,16 @@ class Autoconsumo extends Component
             ->paginate($this->porPagina);
 
         // Próximo número (previsualización del formulario)
-        $motivos = array_keys(self::MOTIVOS);
-        $series  = self::SERIES;
+        $motivos      = \App\Models\MotivoGuia::activos();
+        $motivosTodos = \App\Models\MotivoGuia::orderBy('motivo_guia_concepto')->get();
+        $series       = self::SERIES;
 
         return view('livewire.logistica.autoconsumo', compact(
             'almacenes', 'empresas', 'sedes',
             'autorizacionesEmpresas', 'autorizacionesPersonas',
             'revisionAutoconsumo', 'revisionItems',
             'detalleAutoconsumo', 'detalleItems',
-            'autoconsumos', 'motivos', 'series',
+            'autoconsumos', 'motivos', 'motivosTodos', 'series',
         ));
     }
 }
