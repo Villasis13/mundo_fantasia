@@ -386,7 +386,7 @@
                 <div>
                     <h5 class="mb-0 fw-bold">
                         <i class="fa-solid fa-circle-check me-2 text-success"></i>
-                        Autoconsumo Registrado
+                        Guia Control Interno Registrado
                         @if($revisionAutoconsumo)
                             <span class="fw-normal text-muted ms-2 small">— {{ $revisionAutoconsumo->autoconsumo_numero }}</span>
                         @endif
