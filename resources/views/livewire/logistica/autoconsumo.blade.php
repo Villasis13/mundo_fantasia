@@ -481,17 +481,27 @@
                     </h5>
                     <small class="text-muted">Historial de salidas internas.</small>
                 </div>
-                @can('autoconsumo.crear')
-                <button class="btn btn-warning fw-semibold text-dark" wire:click="nuevoAutoconsumo"
-                        wire:loading.attr="disabled" wire:target="nuevoAutoconsumo">
-                    <span wire:loading.remove wire:target="nuevoAutoconsumo">
-                        <i class="fa-solid fa-plus me-1"></i> Nueva salida
-                    </span>
-                    <span wire:loading wire:target="nuevoAutoconsumo">
-                        <span class="spinner-border" style="width:1.4rem;height:1.4rem;vertical-align:middle;margin-right:.35rem;" role="status"></span>Cargando...
-                    </span>
-                </button>
-                @endcan
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{{ route('logistica.autoconsumo_excel_consolidado', ['desde' => $filtroDesde, 'hasta' => $filtroHasta]) }}"
+                       target="_blank" class="btn btn-outline-success fw-semibold">
+                        <img src="{{ asset('iconos_svg/microsoft-excel.svg') }}" alt="Excel" style="width:18px;height:18px;vertical-align:middle;" class="me-1"> Consolidado
+                    </a>
+                    <a href="{{ route('logistica.autoconsumo_excel_detallado', ['desde' => $filtroDesde, 'hasta' => $filtroHasta]) }}"
+                       target="_blank" class="btn btn-outline-success fw-semibold">
+                        <img src="{{ asset('iconos_svg/microsoft-excel.svg') }}" alt="Excel" style="width:18px;height:18px;vertical-align:middle;" class="me-1"> Detallado
+                    </a>
+                    @can('autoconsumo.crear')
+                    <button class="btn btn-warning fw-semibold text-dark" wire:click="nuevoAutoconsumo"
+                            wire:loading.attr="disabled" wire:target="nuevoAutoconsumo">
+                        <span wire:loading.remove wire:target="nuevoAutoconsumo">
+                            <i class="fa-solid fa-plus me-1"></i> Nueva salida
+                        </span>
+                        <span wire:loading wire:target="nuevoAutoconsumo">
+                            <span class="spinner-border" style="width:1.4rem;height:1.4rem;vertical-align:middle;margin-right:.35rem;" role="status"></span>Cargando...
+                        </span>
+                    </button>
+                    @endcan
+                </div>
             </div>
 
             <div class="row g-2 align-items-end mt-3">

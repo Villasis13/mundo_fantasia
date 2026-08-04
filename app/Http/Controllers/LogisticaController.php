@@ -1654,6 +1654,138 @@ class LogisticaController extends Controller
         }
     }
 
+    // Consulta base de guías (con filtros de fecha) para los Excel
+    private function autoconsumoExcelQuery(\Illuminate\Http\Request $request)
+    {
+        $desde = $request->get('desde');
+        $hasta = $request->get('hasta');
+        return \Illuminate\Support\Facades\DB::table('autoconsumo as ac')
+            ->join('users as u', 'u.id_users', '=', 'ac.id_users')
+            ->when($desde, fn($q) => $q->whereDate('ac.autoconsumo_fecha', '>=', $desde))
+            ->when($hasta, fn($q) => $q->whereDate('ac.autoconsumo_fecha', '<=', $hasta))
+            ->orderByDesc('ac.id_autoconsumo');
+    }
+
+    private function autoconsumoEstiloCabecera($sheet, string $rango): void
+    {
+        $sheet->getStyle($rango)->applyFromArray([
+            'font'      => ['bold' => true, 'color' => ['argb' => 'FFFFFFFF'], 'size' => 10],
+            'fill'      => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['argb' => 'FF1E3A5F']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+            'borders'   => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]],
+        ]);
+    }
+
+    // ── Excel CONSOLIDADO (una fila por guía) ─────────────────────
+    public function autoconsumo_excel_consolidado(\Illuminate\Http\Request $request)
+    {
+        try {
+            $rows = $this->autoconsumoExcelQuery($request)
+                ->select('ac.*', 'u.nombre_users',
+                    \Illuminate\Support\Facades\DB::raw('(SELECT COUNT(*) FROM autoconsumo_detalle WHERE id_autoconsumo = ac.id_autoconsumo) as total_productos'),
+                    \Illuminate\Support\Facades\DB::raw('(SELECT COALESCE(SUM(detalle_cantidad*detalle_costo),0) FROM autoconsumo_detalle WHERE id_autoconsumo = ac.id_autoconsumo) as costo_total'))
+                ->get();
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Consolidado');
+
+            $sheet->mergeCells('A1:K1');
+            $sheet->setCellValue('A1', 'Guía de Control Interno de Salidas — Consolidado');
+            $sheet->getStyle('A1')->applyFromArray(['font' => ['bold' => true, 'size' => 14, 'color' => ['argb' => 'FF1E3A5F']], 'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+
+            $headers = ['N.° Orden', 'N.° Guía', 'Tipo', 'Documento', 'Fecha', 'Motivo', 'Cód. SUNAT', 'Productos', 'Costo Total', 'Estado', 'Registrado por'];
+            $sheet->fromArray($headers, null, 'A3');
+            $this->autoconsumoEstiloCabecera($sheet, 'A3:K3');
+
+            $r = 4;
+            foreach ($rows as $ac) {
+                $sheet->setCellValueExplicit("A{$r}", (string) ($ac->autoconsumo_orden ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit("B{$r}", (string) $ac->autoconsumo_numero, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue("C{$r}", ucfirst($ac->autoconsumo_tipo_mov ?? 'salida'));
+                $sheet->setCellValue("D{$r}", $ac->autoconsumo_documento ?: 'Guía interna');
+                $sheet->setCellValue("E{$r}", \Carbon\Carbon::parse($ac->autoconsumo_fecha)->format('d/m/Y'));
+                $sheet->setCellValue("F{$r}", $ac->autoconsumo_motivo ?: '');
+                $sheet->setCellValue("G{$r}", $ac->autoconsumo_cod_sunat ?: '');
+                $sheet->setCellValue("H{$r}", (int) $ac->total_productos);
+                $sheet->setCellValue("I{$r}", round((float) $ac->costo_total, 2));
+                $sheet->setCellValue("J{$r}", ucfirst($ac->autoconsumo_estado));
+                $sheet->setCellValue("K{$r}", $ac->nombre_users);
+                $sheet->getStyle("I{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+                $r++;
+            }
+            $sheet->getStyle('A4:K' . max(4, $r - 1))->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['argb' => 'FFD0D0D0']]]]);
+            foreach (range('A', 'K') as $c) $sheet->getColumnDimension($c)->setAutoSize(true);
+
+            $file = 'salidas_consolidado_' . now()->format('Ymd_His') . '.xlsx';
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header("Content-Disposition: attachment; filename=\"{$file}\"");
+            header('Cache-Control: max-age=0');
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save('php://output');
+            exit;
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+        }
+    }
+
+    // ── Excel DETALLADO (una fila por producto de cada guía) ──────
+    public function autoconsumo_excel_detallado(\Illuminate\Http\Request $request)
+    {
+        try {
+            $rows = $this->autoconsumoExcelQuery($request)
+                ->join('autoconsumo_detalle as d', 'd.id_autoconsumo', '=', 'ac.id_autoconsumo')
+                ->join('productos as p', 'p.id_pro', '=', 'd.id_pro')
+                ->select('ac.autoconsumo_orden', 'ac.autoconsumo_numero', 'ac.autoconsumo_tipo_mov',
+                    'ac.autoconsumo_documento', 'ac.autoconsumo_fecha', 'ac.autoconsumo_motivo',
+                    'ac.autoconsumo_cod_sunat', 'ac.autoconsumo_estado', 'u.nombre_users',
+                    'p.pro_codigo', 'p.pro_nombre', 'd.detalle_cantidad', 'd.detalle_costo')
+                ->orderByDesc('ac.id_autoconsumo')->orderBy('p.pro_nombre')
+                ->get();
+
+            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+            $sheet->setTitle('Detallado');
+
+            $sheet->mergeCells('A1:L1');
+            $sheet->setCellValue('A1', 'Guía de Control Interno de Salidas — Detallado');
+            $sheet->getStyle('A1')->applyFromArray(['font' => ['bold' => true, 'size' => 14, 'color' => ['argb' => 'FF1E3A5F']], 'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]]);
+
+            $headers = ['N.° Orden', 'N.° Guía', 'Tipo', 'Documento', 'Fecha', 'Motivo', 'Cód. SUNAT', 'Código', 'Producto', 'Cantidad', 'Costo Unit.', 'Total'];
+            $sheet->fromArray($headers, null, 'A3');
+            $this->autoconsumoEstiloCabecera($sheet, 'A3:L3');
+
+            $r = 4;
+            foreach ($rows as $d) {
+                $total = (float) $d->detalle_cantidad * (float) $d->detalle_costo;
+                $sheet->setCellValueExplicit("A{$r}", (string) ($d->autoconsumo_orden ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValueExplicit("B{$r}", (string) $d->autoconsumo_numero, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue("C{$r}", ucfirst($d->autoconsumo_tipo_mov ?? 'salida'));
+                $sheet->setCellValue("D{$r}", $d->autoconsumo_documento ?: 'Guía interna');
+                $sheet->setCellValue("E{$r}", \Carbon\Carbon::parse($d->autoconsumo_fecha)->format('d/m/Y'));
+                $sheet->setCellValue("F{$r}", $d->autoconsumo_motivo ?: '');
+                $sheet->setCellValue("G{$r}", $d->autoconsumo_cod_sunat ?: '');
+                $sheet->setCellValueExplicit("H{$r}", (string) $d->pro_codigo, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue("I{$r}", $d->pro_nombre);
+                $sheet->setCellValue("J{$r}", round((float) $d->detalle_cantidad, 2));
+                $sheet->setCellValue("K{$r}", round((float) $d->detalle_costo, 2));
+                $sheet->setCellValue("L{$r}", round($total, 2));
+                foreach (['J', 'K', 'L'] as $c) $sheet->getStyle("{$c}{$r}")->getNumberFormat()->setFormatCode('#,##0.00');
+                $r++;
+            }
+            $sheet->getStyle('A4:L' . max(4, $r - 1))->applyFromArray(['borders' => ['allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN, 'color' => ['argb' => 'FFD0D0D0']]]]);
+            foreach (range('A', 'L') as $c) $sheet->getColumnDimension($c)->setAutoSize(true);
+
+            $file = 'salidas_detallado_' . now()->format('Ymd_His') . '.xlsx';
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header("Content-Disposition: attachment; filename=\"{$file}\"");
+            header('Cache-Control: max-age=0');
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save('php://output');
+            exit;
+        } catch (\Exception $e) {
+            $this->logs->insertarLog($e);
+        }
+    }
+
     public function autoconsumo_pdf(\Illuminate\Http\Request $request)
     {
         $id = (int) ($request->id ?? 0);
